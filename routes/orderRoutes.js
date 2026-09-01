@@ -2,20 +2,63 @@ const express = require("express");
 const router = express.Router();
 
 const Order = require("../models/Order");
-const steadfast = require("../services/steadfastService");
 
-// ============================================================
-// CREATE NEW ORDER
-// POST /api/orders
-// ============================================================
+const {
+  getFraudCheck,
+  getBalance,
+  createParcel,
+} = require("../services/steadfastService");
+
+/*
+==================================================
+HELPER FUNCTIONS
+==================================================
+*/
+
+const cleanString = (value) => {
+  if (value === undefined || value === null) {
+    return "";
+  }
+
+  return String(value).trim();
+};
+
+const getNumber = (value) => {
+  const number = Number(value);
+
+  return Number.isFinite(number)
+    ? number
+    : NaN;
+};
+
+/*
+==================================================
+POST /api/orders
+CREATE ORDER
+==================================================
+*/
 
 router.post("/", async (req, res) => {
   try {
-    console.log("====================================");
-    console.log("NEW ORDER RECEIVED");
-    console.log("====================================");
+    console.log(
+      "===================================="
+    );
 
-    console.log("Request body:", req.body);
+    console.log(
+      "NEW ORDER REQUEST:"
+    );
+
+    console.log(
+      JSON.stringify(
+        req.body,
+        null,
+        2
+      )
+    );
+
+    console.log(
+      "===================================="
+    );
 
     const {
       name,
@@ -28,140 +71,251 @@ router.post("/", async (req, res) => {
       productId,
       productName,
       productImage,
-
       price,
       quantity,
 
-      deliveryCharge,
+      items,
 
-      orderSource,
-      landingPageId,
+      subtotal,
+      deliveryCharge,
+      total,
 
       source,
-
-      items,
+      orderSource,
+      landingPageId,
     } = req.body;
 
-    // ========================================================
-    // BASIC VALIDATION
-    // ========================================================
+    /*
+    ========================================
+    CUSTOMER VALIDATION
+    ========================================
+    */
 
-    if (!name || !String(name).trim()) {
+    const finalName =
+      cleanString(name);
+
+    const finalPhone =
+      cleanString(phone);
+
+    const finalDistrict =
+      cleanString(district);
+
+    const finalThana =
+      cleanString(thana);
+
+    const finalAddress =
+      cleanString(address);
+
+    const finalNote =
+      cleanString(note);
+
+    if (!finalName) {
       return res.status(400).json({
         success: false,
-        message: "Customer name is required",
+        message: "Name is required.",
       });
     }
 
-    if (!phone || !String(phone).trim()) {
+    if (!finalPhone) {
       return res.status(400).json({
         success: false,
-        message: "Phone number is required",
+        message:
+          "Phone number is required.",
       });
     }
 
-    if (!district || !String(district).trim()) {
+    if (!/^01\d{9}$/.test(finalPhone)) {
       return res.status(400).json({
         success: false,
-        message: "District is required",
+        message:
+          "Invalid Bangladesh phone number.",
       });
     }
 
-    if (!thana || !String(thana).trim()) {
+    if (!finalDistrict) {
       return res.status(400).json({
         success: false,
-        message: "Thana is required",
+        message:
+          "District is required.",
       });
     }
 
-    if (!address || !String(address).trim()) {
+    if (!finalThana) {
       return res.status(400).json({
         success: false,
-        message: "Address is required",
+        message:
+          "Thana is required.",
       });
     }
 
-    // ========================================================
-    // DELIVERY CHARGE
-    // ========================================================
+    if (!finalAddress) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Address is required.",
+      });
+    }
 
-    const finalDeliveryCharge =
-      Number.isFinite(Number(deliveryCharge)) &&
-      Number(deliveryCharge) >= 0
-        ? Number(deliveryCharge)
-        : 0;
-
-    // ========================================================
-    // CREATE FINAL ITEMS
-    // ========================================================
+    /*
+    ========================================
+    NORMALIZE ORDER ITEMS
+    ========================================
+    */
 
     let finalItems = [];
 
-    // ========================================================
-    // CART / MULTIPLE PRODUCTS
-    // ========================================================
+    /*
+    ----------------------------------------
+    CART ORDER
+    ----------------------------------------
+    */
 
     if (
       Array.isArray(items) &&
       items.length > 0
     ) {
-      finalItems = items.map((item) => {
-        const itemPrice =
-          Number(item.price) || 0;
+      finalItems = items.map(
+        (item, index) => {
+          /*
+          Support both:
 
-        const itemQuantity = Math.max(
-          1,
-          Math.floor(
-            Number(item.quantity) || 1
-          )
-        );
+          {
+            productId,
+            productName,
+            productImage
+          }
 
-        return {
-          productId:
-            item.productId ?? null,
+          AND
 
-          productName:
-            item.productName || "",
+          {
+            id,
+            name,
+            image
+          }
+          */
 
-          productImage:
-            item.productImage || "",
+          const finalProductId =
+            item?.productId ??
+            item?.id ??
+            null;
 
-          price:
-            itemPrice,
+          const finalProductName =
+            cleanString(
+              item?.productName ??
+                item?.name
+            );
 
-          quantity:
-            itemQuantity,
+          const finalProductImage =
+            cleanString(
+              item?.productImage ??
+                item?.image
+            );
 
-          subtotal:
-            itemPrice * itemQuantity,
-        };
-      });
+          const finalPrice =
+            getNumber(item?.price);
+
+          const finalQuantity =
+            getNumber(item?.quantity);
+
+          /*
+          PRICE VALIDATION
+          */
+
+          if (
+            !Number.isFinite(
+              finalPrice
+            ) ||
+            finalPrice < 0
+          ) {
+            throw new Error(
+              `Invalid price for item ${
+                index + 1
+              }: ${finalProductName || "Unknown product"}`
+            );
+          }
+
+          /*
+          QUANTITY VALIDATION
+          */
+
+          if (
+            !Number.isFinite(
+              finalQuantity
+            ) ||
+            finalQuantity < 1
+          ) {
+            throw new Error(
+              `Invalid quantity for item ${
+                index + 1
+              }: ${finalProductName || "Unknown product"}`
+            );
+          }
+
+          const itemSubtotal =
+            finalPrice *
+            finalQuantity;
+
+          return {
+            productId:
+              finalProductId,
+
+            productName:
+              finalProductName,
+
+            productImage:
+              finalProductImage,
+
+            price:
+              finalPrice,
+
+            quantity:
+              finalQuantity,
+
+            subtotal:
+              itemSubtotal,
+          };
+        }
+      );
     }
 
-    // ========================================================
-    // SINGLE PRODUCT / LANDING PAGE
-    // ========================================================
+    /*
+    ----------------------------------------
+    BUY NOW ORDER
+    ----------------------------------------
+    */
 
     else {
       const finalPrice =
-        Number(price);
+        getNumber(price);
+
+      const finalQuantity =
+        getNumber(quantity);
 
       if (
-        !Number.isFinite(finalPrice) ||
+        !Number.isFinite(
+          finalPrice
+        ) ||
         finalPrice < 0
       ) {
         return res.status(400).json({
           success: false,
-          message: "Invalid product price",
+          message:
+            "Invalid product price.",
         });
       }
 
-      const finalQuantity = Math.max(
-        1,
-        Math.floor(
-          Number(quantity) || 1
-        )
-      );
+      if (
+        !Number.isFinite(
+          finalQuantity
+        ) ||
+        finalQuantity < 1
+      ) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Invalid product quantity.",
+        });
+      }
 
       finalItems = [
         {
@@ -169,10 +323,10 @@ router.post("/", async (req, res) => {
             productId ?? null,
 
           productName:
-            productName || "",
+            cleanString(productName),
 
           productImage:
-            productImage || "",
+            cleanString(productImage),
 
           price:
             finalPrice,
@@ -187,308 +341,294 @@ router.post("/", async (req, res) => {
       ];
     }
 
-    // ========================================================
-    // CHECK ITEMS
-    // ========================================================
+    /*
+    ========================================
+    CHECK ITEMS
+    ========================================
+    */
 
-    if (!finalItems.length) {
-      return res.status(400).json({
-        success: false,
-        message: "No order items found",
-      });
-    }
-
-    // ========================================================
-    // VALIDATE ITEM PRICES
-    // ========================================================
-
-    const hasInvalidItem = finalItems.some(
-      (item) =>
-        !Number.isFinite(
-          Number(item.price)
-        ) ||
-        Number(item.price) < 0
-    );
-
-    if (hasInvalidItem) {
+    if (
+      !Array.isArray(finalItems) ||
+      finalItems.length === 0
+    ) {
       return res.status(400).json({
         success: false,
         message:
-          "One or more product prices are invalid",
+          "No valid products found in order.",
       });
     }
 
-    // ========================================================
-    // CALCULATE SUBTOTAL
-    // ========================================================
+    /*
+    ========================================
+    CALCULATE SUBTOTAL
+    ========================================
+    */
 
     const calculatedSubtotal =
       finalItems.reduce(
-        (sum, item) =>
-          sum + item.subtotal,
+        (sum, item) => {
+          return (
+            sum +
+            Number(item.subtotal || 0)
+          );
+        },
         0
       );
 
-    // ========================================================
-    // CALCULATE TOTAL
-    // ========================================================
+    /*
+    ========================================
+    DELIVERY CHARGE
+    ========================================
+    */
+
+    const calculatedDeliveryCharge =
+      finalDistrict
+        .toLowerCase()
+        .includes("dhaka")
+        ? 60
+        : 100;
+
+    /*
+    ========================================
+    TOTAL
+    ========================================
+    */
 
     const calculatedTotal =
       calculatedSubtotal +
-      finalDeliveryCharge;
+      calculatedDeliveryCharge;
 
-    // ========================================================
-    // MAIN PRODUCT INFORMATION
-    //
-    // For cart order:
-    // first item will be used as primary product info.
-    // ========================================================
+    /*
+    ========================================
+    MAIN PRODUCT
+    ========================================
+    */
 
     const firstItem =
       finalItems[0];
 
-    const finalProductId =
-      productId ??
-      firstItem.productId ??
-      null;
+    /*
+    ========================================
+    CREATE ORDER
+    ========================================
+    */
 
-    const finalProductName =
-      productName ||
-      firstItem.productName ||
-      "";
+    const newOrder =
+      new Order({
+        /*
+        CUSTOMER
+        */
 
-    const finalProductImage =
-      productImage ||
-      firstItem.productImage ||
-      "";
+        name: finalName,
 
-    const finalPrice =
-      Number.isFinite(Number(price)) &&
-      Number(price) >= 0
-        ? Number(price)
-        : firstItem.price;
+        phone: finalPhone,
 
-    const finalQuantity =
-      Number.isFinite(Number(quantity)) &&
-      Number(quantity) >= 1
-        ? Math.floor(Number(quantity))
-        : firstItem.quantity;
+        district:
+          finalDistrict,
 
-    // ========================================================
-    // CREATE ORDER DATA
-    // ========================================================
+        thana:
+          finalThana,
 
-    const orderData = {
-      // ======================================================
-      // CUSTOMER
-      // ======================================================
+        address:
+          finalAddress,
 
-      name:
-        String(name).trim(),
+        note:
+          finalNote,
 
-      phone:
-        String(phone).trim(),
+        /*
+        MAIN PRODUCT
+        */
 
-      district:
-        String(district).trim(),
+        productId:
+          productId ??
+          firstItem.productId ??
+          null,
 
-      thana:
-        String(thana).trim(),
+        productName:
+          productName
+            ? cleanString(
+                productName
+              )
+            : firstItem.productName,
 
-      address:
-        String(address).trim(),
+        productImage:
+          productImage
+            ? cleanString(
+                productImage
+              )
+            : firstItem.productImage,
 
-      note:
-        note
-          ? String(note).trim()
-          : "",
+        price:
+          Number.isFinite(
+            getNumber(price)
+          )
+            ? getNumber(price)
+            : firstItem.price,
 
-      // ======================================================
-      // MAIN PRODUCT
-      // ======================================================
+        quantity:
+          Number.isFinite(
+            getNumber(quantity)
+          )
+            ? getNumber(quantity)
+            : firstItem.quantity,
 
-      productId:
-        finalProductId,
+        /*
+        ITEMS
+        */
 
-      productName:
-        finalProductName,
+        items:
+          finalItems,
 
-      productImage:
-        finalProductImage,
+        /*
+        MONEY
+        */
 
-      price:
-        finalPrice,
+        subtotal:
+          calculatedSubtotal,
 
-      quantity:
-        finalQuantity,
+        deliveryCharge:
+          calculatedDeliveryCharge,
 
-      // ======================================================
-      // ITEMS
-      // ======================================================
+        total:
+          calculatedTotal,
 
-      items:
-        finalItems,
+        /*
+        STATUS
+        */
 
-      // ======================================================
-      // PRICE
-      // ======================================================
+        status:
+          "pending",
 
-      subtotal:
-        calculatedSubtotal,
+        /*
+        ORDER SOURCE
+        */
 
-      deliveryCharge:
-        finalDeliveryCharge,
+        source:
+          source || "website",
 
-      total:
-        calculatedTotal,
+        orderSource:
+          orderSource ||
+          "website",
 
-      // ======================================================
-      // STATUS
-      // ======================================================
+        landingPageId:
+          landingPageId || "",
+      });
 
-      status:
-        "pending",
-
-      // ======================================================
-      // SOURCE
-      // ======================================================
-
-      source:
-        source || "website",
-
-      orderSource:
-        orderSource || "website",
-
-      landingPageId:
-        landingPageId || "",
-    };
-
-    // ========================================================
-    // DEBUG
-    // ========================================================
-
-    console.log(
-      "FINAL ORDER DATA:"
-    );
-
-    console.log(
-      JSON.stringify(
-        orderData,
-        null,
-        2
-      )
-    );
-
-    // ========================================================
-    // SAVE ORDER
-    // ========================================================
-
-    const order =
-      new Order(orderData);
+    /*
+    ========================================
+    SAVE TO MONGODB
+    ========================================
+    */
 
     const savedOrder =
-      await order.save();
+      await newOrder.save();
 
-    // ========================================================
-    // SUCCESS
-    // ========================================================
+    console.log(
+      "ORDER SAVED:"
+    );
 
-    console.log("====================================");
-    console.log("ORDER SAVED SUCCESSFULLY");
-    console.log("====================================");
+    console.log(
+      savedOrder._id
+    );
 
-    console.log({
-      orderId:
-        savedOrder._id,
-
-      customer:
-        savedOrder.name,
-
-      phone:
-        savedOrder.phone,
-
-      product:
-        savedOrder.productName,
-
-      quantity:
-        savedOrder.quantity,
-
-      subtotal:
-        savedOrder.subtotal,
-
-      deliveryCharge:
-        savedOrder.deliveryCharge,
-
-      total:
-        savedOrder.total,
-
-      items:
-        savedOrder.items.length,
-    });
-
-    // ========================================================
-    // RESPONSE
-    // ========================================================
+    /*
+    ========================================
+    RESPONSE
+    ========================================
+    */
 
     return res.status(201).json({
       success: true,
 
       message:
-        "Order Placed Successfully",
+        "Order created successfully.",
 
-      order:
-        savedOrder,
+      order: savedOrder,
     });
-
-  } catch (err) {
+  } catch (error) {
     console.error(
-      "CREATE ORDER ERROR:",
-      err
+      "CREATE ORDER ERROR:"
     );
 
-    // ========================================================
-    // MONGOOSE VALIDATION ERROR
-    // ========================================================
+    console.error(
+      error
+    );
+
+    /*
+    ========================================
+    CUSTOM VALIDATION ERROR
+    ========================================
+    */
 
     if (
-      err.name ===
+      error.message &&
+      error.name ===
+        "Error"
+    ) {
+      return res.status(400).json({
+        success: false,
+        message:
+          error.message,
+      });
+    }
+
+    /*
+    ========================================
+    MONGOOSE VALIDATION ERROR
+    ========================================
+    */
+
+    if (
+      error.name ===
       "ValidationError"
     ) {
+      const errors =
+        Object.values(
+          error.errors
+        ).map(
+          (err) => ({
+            field:
+              err.path,
+
+            message:
+              err.message,
+          })
+        );
+
       return res.status(400).json({
         success: false,
 
         message:
-          "Order validation failed",
+          "Order validation failed.",
 
-        errors:
-          Object.values(
-            err.errors
-          ).map(
-            (error) => error.message
-          ),
+        errors,
       });
     }
 
-    // ========================================================
-    // GENERAL ERROR
-    // ========================================================
+    /*
+    ========================================
+    DEFAULT SERVER ERROR
+    ========================================
+    */
 
     return res.status(500).json({
       success: false,
 
       message:
-        "Failed to place order",
+        "Failed to create order.",
 
       error:
-        err.message,
+        error.message,
     });
   }
 });
 
-// ============================================================
-// GET ALL ORDERS
-// GET /api/orders
-// ============================================================
+/*
+==================================================
+GET ALL ORDERS
+GET /api/orders
+==================================================
+*/
 
 router.get("/", async (req, res) => {
   try {
@@ -498,285 +638,260 @@ router.get("/", async (req, res) => {
           createdAt: -1,
         });
 
-    res.json(orders);
+    return res.json({
+      success: true,
+      orders,
+    });
+  } catch (error) {
+    console.error(
+      "GET ORDERS ERROR:",
+      error
+    );
 
-  } catch (err) {
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
-      error: err.message,
+      message:
+        "Failed to fetch orders.",
+      error:
+        error.message,
     });
   }
 });
 
-// ============================================================
-// FRAUD CHECK
-// GET /api/orders/fraud-check/:phone
-// ============================================================
+/*
+==================================================
+GET SINGLE ORDER
+GET /api/orders/:id
+==================================================
+*/
 
-router.get(
-  "/fraud-check/:phone",
-  async (req, res) => {
-    try {
-      const data =
-        await steadfast.getFraudCheck(
-          req.params.phone
-        );
+router.get("/:id", async (req, res) => {
+  try {
+    const order =
+      await Order.findById(
+        req.params.id
+      );
 
-      res.json(data);
-
-    } catch (err) {
-      res.status(502).json({
+    if (!order) {
+      return res.status(404).json({
         success: false,
-        error: err.message,
+        message:
+          "Order not found.",
       });
     }
+
+    return res.json({
+      success: true,
+      order,
+    });
+  } catch (error) {
+    console.error(
+      "GET SINGLE ORDER ERROR:",
+      error
+    );
+
+    return res.status(500).json({
+      success: false,
+      message:
+        "Failed to fetch order.",
+      error:
+        error.message,
+    });
   }
-);
+});
 
-// ============================================================
-// STEADFAST BALANCE
-// GET /api/orders/steadfast-balance
-// ============================================================
+/*
+==================================================
+UPDATE ORDER
+PUT /api/orders/:id
+==================================================
+*/
 
-router.get(
-  "/steadfast-balance",
-  async (req, res) => {
-    try {
-      const data =
-        await steadfast.getBalance();
+router.put("/:id", async (req, res) => {
+  try {
+    const updatedOrder =
+      await Order.findByIdAndUpdate(
+        req.params.id,
+        req.body,
+        {
+          new: true,
+          runValidators: true,
+        }
+      );
 
-      res.json(data);
-
-    } catch (err) {
-      res.status(502).json({
+    if (!updatedOrder) {
+      return res.status(404).json({
         success: false,
-        error: err.message,
+        message:
+          "Order not found.",
       });
     }
+
+    return res.json({
+      success: true,
+
+      message:
+        "Order updated successfully.",
+
+      order:
+        updatedOrder,
+    });
+  } catch (error) {
+    console.error(
+      "UPDATE ORDER ERROR:",
+      error
+    );
+
+    return res.status(500).json({
+      success: false,
+
+      message:
+        "Failed to update order.",
+
+      error:
+        error.message,
+    });
   }
-);
+});
 
-// ============================================================
-// GET SINGLE ORDER
-// GET /api/orders/:id
-// ============================================================
-
-router.get(
-  "/:id",
-  async (req, res) => {
-    try {
-      const order =
-        await Order.findById(
-          req.params.id
-        );
-
-      if (!order) {
-        return res.status(404).json({
-          success: false,
-          error:
-            "Order not found",
-        });
-      }
-
-      res.json(order);
-
-    } catch (err) {
-      res.status(404).json({
-        success: false,
-        error:
-          "Order not found",
-      });
-    }
-  }
-);
-
-// ============================================================
-// UPDATE ORDER
-// PUT /api/orders/:id
-// ============================================================
-
-router.put(
-  "/:id",
-  async (req, res) => {
-    try {
-      const updated =
-        await Order.findByIdAndUpdate(
-          req.params.id,
-          req.body,
-          {
-            new: true,
-            runValidators: true,
-          }
-        );
-
-      if (!updated) {
-        return res.status(404).json({
-          success: false,
-          error:
-            "Order not found",
-        });
-      }
-
-      res.json(updated);
-
-    } catch (err) {
-      res.status(500).json({
-        success: false,
-        error:
-          err.message,
-      });
-    }
-  }
-);
-
-// ============================================================
-// DELETE ORDER
-// DELETE /api/orders/:id
-// ============================================================
+/*
+==================================================
+DELETE ORDER
+DELETE /api/orders/:id
+==================================================
+*/
 
 router.delete(
   "/:id",
   async (req, res) => {
     try {
-      const deleted =
+      const deletedOrder =
         await Order.findByIdAndDelete(
           req.params.id
         );
 
-      if (!deleted) {
+      if (!deletedOrder) {
         return res.status(404).json({
           success: false,
-          error:
-            "Order not found",
+          message:
+            "Order not found.",
         });
       }
 
-      res.json({
+      return res.json({
         success: true,
-        message:
-          "Order deleted",
-      });
 
-    } catch (err) {
-      res.status(500).json({
+        message:
+          "Order deleted successfully.",
+      });
+    } catch (error) {
+      console.error(
+        "DELETE ORDER ERROR:",
+        error
+      );
+
+      return res.status(500).json({
         success: false,
+
+        message:
+          "Failed to delete order.",
+
         error:
-          err.message,
+          error.message,
       });
     }
   }
 );
 
-// ============================================================
-// CONFIRM ORDER
-// POST /api/orders/:id/confirm
-// ============================================================
+/*
+==================================================
+FRAUD CHECK
+POST /api/orders/fraud-check
+==================================================
+*/
 
 router.post(
-  "/:id/confirm",
+  "/fraud-check",
   async (req, res) => {
     try {
-      const order =
-        await Order.findById(
-          req.params.id
-        );
+      const { phone } =
+        req.body;
 
-      if (!order) {
-        return res.status(404).json({
+      if (!phone) {
+        return res.status(400).json({
           success: false,
-          error:
-            "Order not found",
+          message:
+            "Phone number is required.",
         });
       }
 
-      // ------------------------------------------------------
-      // Confirm
-      // ------------------------------------------------------
+      const result =
+        await getFraudCheck(
+          phone
+        );
 
-      order.status =
-        "confirmed";
+      return res.json({
+        success: true,
+        data: result,
+      });
+    } catch (error) {
+      console.error(
+        "FRAUD CHECK ERROR:",
+        error
+      );
 
-      await order.save();
-
-      // ------------------------------------------------------
-      // Optional Steadfast Parcel
-      // ------------------------------------------------------
-
-      if (
-        req.body.createParcel &&
-        order.courierStatus !==
-          "created"
-      ) {
-        try {
-          const result =
-            await steadfast.createParcel(
-              order
-            );
-
-          const consignment =
-            result.consignment || {};
-
-          order.courier =
-            "steadfast";
-
-          order.courierStatus =
-            "created";
-
-          order.consignmentId =
-            consignment.consignment_id;
-
-          order.trackingCode =
-            consignment.tracking_code;
-
-          order.parcelCreatedAt =
-            new Date();
-
-          order.parcelError =
-            null;
-
-          if (
-            !Array.isArray(
-              order.courierHistory
-            )
-          ) {
-            order.courierHistory =
-              [];
-          }
-
-          order.courierHistory.push({
-            status: "created",
-            at: new Date(),
-          });
-
-          await order.save();
-
-        } catch (courierErr) {
-          order.courierStatus =
-            "failed";
-
-          order.parcelError =
-            courierErr.message;
-
-          await order.save();
-        }
-      }
-
-      res.json(order);
-
-    } catch (err) {
-      res.status(500).json({
+      return res.status(500).json({
         success: false,
+        message:
+          "Fraud check failed.",
         error:
-          err.message,
+          error.message,
       });
     }
   }
 );
 
-// ============================================================
-// CREATE / RETRY STEADFAST PARCEL
-// POST /api/orders/:id/create-parcel
-// ============================================================
+/*
+==================================================
+STEADFAST BALANCE
+GET /api/orders/courier/balance
+==================================================
+*/
+
+router.get(
+  "/courier/balance",
+  async (req, res) => {
+    try {
+      const balance =
+        await getBalance();
+
+      return res.json({
+        success: true,
+        data: balance,
+      });
+    } catch (error) {
+      console.error(
+        "BALANCE ERROR:",
+        error
+      );
+
+      return res.status(500).json({
+        success: false,
+        message:
+          "Failed to get courier balance.",
+        error:
+          error.message,
+      });
+    }
+  }
+);
+
+/*
+==================================================
+CREATE COURIER PARCEL
+POST /api/orders/:id/create-parcel
+==================================================
+*/
 
 router.post(
   "/:id/create-parcel",
@@ -790,199 +905,212 @@ router.post(
       if (!order) {
         return res.status(404).json({
           success: false,
-          error:
-            "Order not found",
+          message:
+            "Order not found.",
         });
       }
 
-      // ------------------------------------------------------
-      // Duplicate protection
-      // ------------------------------------------------------
+      const parcel =
+        await createParcel(
+          order
+        );
 
-      if (
-        order.courierStatus ===
-          "created" &&
-        !req.body.force
-      ) {
-        return res.json(order);
-      }
+      order.courier =
+        "steadfast";
+
+      order.parcelCreatedAt =
+        new Date();
+
+      order.courierStatus =
+        parcel?.status ||
+        "created";
+
+      order.consignmentId =
+        parcel?.consignment?.consignment_id ||
+        parcel?.consignment_id ||
+        null;
+
+      order.trackingCode =
+        parcel?.consignment?.tracking_code ||
+        parcel?.tracking_code ||
+        null;
+
+      order.parcelError =
+        null;
+
+      await order.save();
+
+      return res.json({
+        success: true,
+
+        message:
+          "Parcel created successfully.",
+
+        order,
+
+        parcel,
+      });
+    } catch (error) {
+      console.error(
+        "CREATE PARCEL ERROR:",
+        error
+      );
 
       try {
-        const result =
-          await steadfast.createParcel(
-            order
-          );
-
-        const consignment =
-          result.consignment || {};
-
-        order.courier =
-          "steadfast";
-
-        order.courierStatus =
-          "created";
-
-        order.consignmentId =
-          consignment.consignment_id;
-
-        order.trackingCode =
-          consignment.tracking_code;
-
-        order.parcelCreatedAt =
-          new Date();
-
-        order.parcelError =
-          null;
-
-        if (
-          !Array.isArray(
-            order.courierHistory
-          )
-        ) {
-          order.courierHistory =
-            [];
-        }
-
-        order.courierHistory.push({
-          status: req.body.force
-            ? "recreated"
-            : "created",
-
-          at: new Date(),
-        });
-
-        await order.save();
-
-        res.json(order);
-
-      } catch (courierErr) {
-        order.courierStatus =
-          "failed";
-
-        order.parcelError =
-          courierErr.message;
-
-        await order.save();
-
-        res.status(502).json({
-          success: false,
-
-          error:
-            courierErr.message,
-
-          order,
-        });
+        await Order.findByIdAndUpdate(
+          req.params.id,
+          {
+            parcelError:
+              error.message,
+          }
+        );
+      } catch (updateError) {
+        console.error(
+          updateError
+        );
       }
 
-    } catch (err) {
-      res.status(500).json({
+      return res.status(500).json({
         success: false,
+
+        message:
+          "Failed to create parcel.",
+
         error:
-          err.message,
+          error.message,
       });
     }
   }
 );
 
-// ============================================================
-// STEADFAST WEBHOOK
-// POST /api/orders/steadfast/webhook
-// ============================================================
-
-const COURIER_TO_ORDER_STATUS = {
-  delivered: "delivered",
-  cancelled: "cancelled",
-  partial_delivered: "delivered",
-  returned: "cancelled",
-};
+/*
+==================================================
+STEADFAST WEBHOOK
+POST /api/orders/webhook
+==================================================
+*/
 
 router.post(
-  "/steadfast/webhook",
+  "/webhook",
   async (req, res) => {
     try {
+      console.log(
+        "STEADFAST WEBHOOK:"
+      );
+
+      console.log(
+        JSON.stringify(
+          req.body,
+          null,
+          2
+        )
+      );
+
       const {
         consignment_id,
         status,
-        tracking_code,
-        note,
+        invoice,
       } = req.body;
 
       if (!consignment_id) {
         return res.status(400).json({
           success: false,
-          error:
-            "Missing consignment_id",
+          message:
+            "Consignment ID is required.",
         });
       }
 
       const order =
         await Order.findOne({
-          consignmentId:
-            String(consignment_id),
+          $or: [
+            {
+              consignmentId:
+                consignment_id,
+            },
+
+            {
+              trackingCode:
+                consignment_id,
+            },
+
+            {
+              _id: invoice,
+            },
+          ],
         });
 
       if (!order) {
         return res.status(404).json({
           success: false,
-          error:
-            "Order not found for consignment",
+          message:
+            "Order not found.",
         });
       }
 
-      // ------------------------------------------------------
-      // Courier info
-      // ------------------------------------------------------
-
       order.courierStatus =
-        status;
+        status || null;
 
-      if (tracking_code) {
-        order.trackingCode =
-          tracking_code;
+      /*
+      STATUS MAPPING
+      */
+
+      const normalizedStatus =
+        String(
+          status || ""
+        ).toLowerCase();
+
+      if (
+        normalizedStatus ===
+          "delivered" ||
+        normalizedStatus ===
+          "partial_delivered"
+      ) {
+        order.status =
+          "delivered";
       }
 
       if (
-        !Array.isArray(
-          order.courierHistory
-        )
+        normalizedStatus ===
+          "cancelled" ||
+        normalizedStatus ===
+          "returned"
       ) {
-        order.courierHistory =
-          [];
+        order.status =
+          "returned";
       }
 
       order.courierHistory.push({
-        status,
-        note: note || "",
-        at: new Date(),
+        status:
+          status || "",
+
+        note:
+          "Updated from Steadfast webhook.",
+
+        at:
+          new Date(),
       });
-
-      // ------------------------------------------------------
-      // Sync order status
-      // ------------------------------------------------------
-
-      if (
-        COURIER_TO_ORDER_STATUS[
-          status
-        ]
-      ) {
-        order.status =
-          COURIER_TO_ORDER_STATUS[
-            status
-          ];
-      }
 
       await order.save();
 
-      res.json({
+      return res.json({
         success: true,
-        ok: true,
+        message:
+          "Webhook processed.",
       });
+    } catch (error) {
+      console.error(
+        "WEBHOOK ERROR:",
+        error
+      );
 
-    } catch (err) {
-      res.status(500).json({
+      return res.status(500).json({
         success: false,
+
+        message:
+          "Webhook processing failed.",
+
         error:
-          err.message,
+          error.message,
       });
     }
   }
