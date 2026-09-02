@@ -1,64 +1,206 @@
-{/* ==================================================
-    ITEMS
-================================================== */}
+const mongoose = require("mongoose");
 
-<div className="animate-in rounded-2xl border border-mist-200 bg-white p-6 shadow-card">
+const orderItemSchema = new mongoose.Schema(
+  {
+    productId: {
+      type: String,
+      default: "",
+    },
 
-  <h3 className="mb-4 font-display text-base font-bold text-ink-900">
-    অর্ডার আইটেম (
-    {(editing ? form.items : order.items)?.length || 0}
-    )
-  </h3>
+    productName: {
+      type: String,
+      default: "",
+    },
 
-  {!editing ? (
-    <div className="divide-y divide-mist-100">
-      {Array.isArray(order.items) &&
-        order.items.map((item, i) => (
-          <div key={i} className="flex items-center gap-4 py-3.5">
-            <img
-              src={item.productImage}
-              alt={item.productName || "Product"}
-              className="h-16 w-16 flex-shrink-0 rounded-xl bg-mist-100 object-cover"
-              onError={(e) => {
-                e.target.onerror = null;
-                e.target.src =
-                  "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI2NCIgaGVpZ2h0PSI2NCIgdmlld0JveD0iMCAwIDY0IDY0Ij48cmVjdCB3aWR0aD0iNjQiIGhlaWdodD0iNjQiIGZpbGw9IiNmMWY1ZjkiLz48L3N2Zz4=";
-              }}
-            />
+    productImage: {
+      type: String,
+      default: "",
+    },
 
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-semibold text-ink-900">
-                {item.productName || "Unnamed Product"}
-              </p>
+    price: {
+      type: Number,
+      default: 0,
+    },
 
-              <p className="text-xs text-slate-400">
-                Qty: {item.quantity || 0}
-              </p>
-            </div>
+    quantity: {
+      type: Number,
+      default: 1,
+    },
+  },
+  { _id: false }
+);
 
-            <div className="flex-shrink-0 text-right">
-              <p className="text-sm font-semibold text-ink-900">
-                {currency(
-                  (Number(item.price) || 0) * (Number(item.quantity) || 0)
-                )}
-              </p>
+const orderSchema = new mongoose.Schema(
+  {
+    // Customer Information
+    name: {
+      type: String,
+      required: true,
+      trim: true,
+    },
 
-              <p className="text-[11px] text-slate-400">
-                {currency(item.price)} / প্রতিটি
-              </p>
-            </div>
-          </div>
-        ))}
-    </div>
-  ) : (
-    <div className="divide-y divide-mist-100">
-      {form.items.map((item, i) => (
-        <div key={i} className="flex items-center gap-3 py-3.5">
-          <img
-            src={item.productImage}
-            alt={item.productName || "Product"}
-            className="h-14 w-14 flex-shrink-0 rounded-xl bg-mist-100 object-cover"
-            onError={(e) => {
-              e.target.onerror = null;
-              e.target.src =
-                "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI2NCIgaGVpZ2h0PSI2NCIgdmlld0JveD0iMCAwIDY0IDY0Ij48cmVjdCB3aWR0aD0
+    phone: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+
+    district: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+
+    thana: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+
+    address: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+
+    note: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+
+    // Product Information
+    productId: {
+      type: String,
+      default: "",
+    },
+
+    productName: {
+      type: String,
+      default: "",
+    },
+
+    productImage: {
+      type: String,
+      default: "",
+    },
+
+    price: {
+      type: Number,
+      default: 0,
+    },
+
+    quantity: {
+      type: Number,
+      default: 1,
+    },
+
+    // Multiple Items
+    items: {
+      type: [orderItemSchema],
+      default: [],
+    },
+
+    // Payment / Amount
+    subtotal: {
+      type: Number,
+      default: 0,
+    },
+
+    deliveryCharge: {
+      type: Number,
+      default: 0,
+    },
+
+    total: {
+      type: Number,
+      default: 0,
+    },
+
+    // Order Status
+    status: {
+      type: String,
+      enum: [
+        "pending",
+        "confirmed",
+        "processing",
+        "shipped",
+        "delivered",
+        "returned",
+        "cancelled",
+      ],
+      default: "pending",
+    },
+
+    // Source
+    source: {
+      type: String,
+      default: "website",
+    },
+
+    orderSource: {
+      type: String,
+      default: "website",
+    },
+
+    landingPageId: {
+      type: String,
+      default: "",
+    },
+
+    // Tenant
+    tenantId: {
+      type: String,
+      default: "",
+    },
+
+    // Courier
+    courier: {
+      type: String,
+      default: "",
+    },
+
+    trackingCode: {
+      type: String,
+      default: "",
+    },
+
+    parcelCreatedAt: {
+      type: Date,
+      default: null,
+    },
+
+    // Printing
+    printStatus: {
+      type: Boolean,
+      default: false,
+    },
+
+    printedAt: {
+      type: Date,
+      default: null,
+    },
+
+    // Return Information
+    returnReason: {
+      type: String,
+      default: "",
+    },
+
+    refundAmount: {
+      type: Number,
+      default: 0,
+    },
+
+    refundStatus: {
+      type: String,
+      enum: ["pending", "processing", "refunded", "rejected"],
+      default: "pending",
+    },
+  },
+  {
+    timestamps: true,
+  }
+);
+
+module.exports = mongoose.model("Order", orderSchema);
