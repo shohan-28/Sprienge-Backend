@@ -128,6 +128,7 @@ const orderSchema = new mongoose.Schema(
         "delivered",
         "returned",
         "cancelled",
+        "duplicate",
       ],
       default: "pending",
     },
