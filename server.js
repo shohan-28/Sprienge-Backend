@@ -1,15 +1,17 @@
 const express = require("express");
 const mongoose = require("mongoose");
 const cors = require("cors");
+
 require("dotenv").config();
 
 const app = express();
 
-// ============================================================
-// MIDDLEWARE
-// ============================================================
+/*
+==================================================
+CORS
+==================================================
+*/
 
-// CORS
 app.use(
   cors({
     origin: true,
@@ -17,88 +19,154 @@ app.use(
   })
 );
 
-// JSON body parser
-app.use(express.json());
+/*
+==================================================
+BODY PARSER
+==================================================
+*/
 
-// URL encoded body parser
+app.use(
+  express.json()
+);
+
 app.use(
   express.urlencoded({
     extended: true,
   })
 );
 
-// ============================================================
-// HEALTH CHECK
-// ============================================================
+/*
+==================================================
+HOME
+==================================================
+*/
 
 app.get("/", (req, res) => {
   res.json({
     success: true,
     status: "ok",
-    service: "spriengge-backend",
-    message: "Backend is running successfully",
+    service:
+      "spriengge-backend",
+    message:
+      "Backend is running successfully",
   });
 });
 
-// ============================================================
-// API ROUTES
-// ============================================================
+/*
+==================================================
+ORDER ROUTES
+==================================================
+*/
 
 app.use(
   "/api/orders",
   require("./routes/orderRoutes")
 );
 
-// ============================================================
-// 404 HANDLER
-// ============================================================
+/*
+==================================================
+404
+==================================================
+*/
 
-app.use((req, res) => {
-  res.status(404).json({
-    success: false,
-    message: "API route not found",
-    path: req.originalUrl,
-  });
-});
+app.use(
+  (req, res) => {
+    res.status(404).json({
+      success: false,
 
-// ============================================================
-// GLOBAL ERROR HANDLER
-// ============================================================
+      message:
+        "API route not found",
 
-app.use((err, req, res, next) => {
-  console.error("GLOBAL ERROR:", err);
+      path:
+        req.originalUrl,
+    });
+  }
+);
 
-  res.status(500).json({
-    success: false,
-    message: "Internal server error",
-    error: err.message,
-  });
-});
+/*
+==================================================
+GLOBAL ERROR
+==================================================
+*/
 
-// ============================================================
-// MONGODB + SERVER
-// ============================================================
+app.use(
+  (err, req, res, next) => {
+    console.error(
+      "GLOBAL ERROR:",
+      err
+    );
 
-const PORT = process.env.PORT || 5000;
+    res.status(500).json({
+      success: false,
+
+      message:
+        "Internal server error",
+
+      error:
+        err.message,
+    });
+  }
+);
+
+/*
+==================================================
+SERVER
+==================================================
+*/
+
+const PORT =
+  process.env.PORT || 5000;
 
 mongoose
-  .connect(process.env.MONGO_URI)
+  .connect(
+    process.env.MONGO_URI
+  )
   .then(() => {
-    console.log("====================================");
-    console.log("MongoDB Connected Successfully");
-    console.log("====================================");
+    console.log(
+      "===================================="
+    );
 
-    app.listen(PORT, () => {
-      console.log("====================================");
-      console.log(`Server running on port ${PORT}`);
-      console.log("====================================");
-    });
+    console.log(
+      "MongoDB Connected Successfully"
+    );
+
+    console.log(
+      "===================================="
+    );
+
+    app.listen(
+      PORT,
+      () => {
+        console.log(
+          "===================================="
+        );
+
+        console.log(
+          `Server running on port ${PORT}`
+        );
+
+        console.log(
+          "===================================="
+        );
+      }
+    );
   })
   .catch((err) => {
-    console.error("====================================");
-    console.error("MongoDB Connection Error:");
-    console.error(err.message);
-    console.error("====================================");
+    console.error(
+      "===================================="
+    );
+
+    console.error(
+      "MongoDB Connection Error:"
+    );
+
+    console.error(
+      err.message
+    );
+
+    console.error(
+      "===================================="
+    );
 
     process.exit(1);
   });

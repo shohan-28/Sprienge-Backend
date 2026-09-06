@@ -1,8 +1,10 @@
-
 const express = require("express");
+const mongoose = require("mongoose");
+
 const router = express.Router();
 
 const Order = require("../models/Order");
+const Product = require("../models/Product");
 
 const {
   getFraudCheck,
@@ -32,6 +34,521 @@ const getNumber = (value) => {
     : NaN;
 };
 
+const normalizeProductId = (value) => {
+  const id = Number(value);
+
+  return Number.isInteger(id) && id > 0
+    ? id
+    : null;
+};
+
+const normalizeQuantity = (value) => {
+  const quantity = Number(value);
+
+  return Number.isInteger(quantity) && quantity > 0
+    ? quantity
+    : null;
+};
+
+const normalizeVariantId = (value) => {
+  return cleanString(value);
+};
+
+/*
+==================================================
+FIND PRODUCT
+==================================================
+*/
+
+const findProduct = async (productId) => {
+  const normalizedId = normalizeProductId(
+    productId
+  );
+
+  if (!normalizedId) {
+    return null;
+  }
+
+  return await Product.findOne({
+    productId: normalizedId,
+  });
+};
+
+/*
+==================================================
+FIND VARIANT
+==================================================
+*/
+
+const findVariant = (
+  product,
+  variantId,
+  selectedColor
+) => {
+  if (
+    !product ||
+    !Array.isArray(product.variants) ||
+    product.variants.length === 0
+  ) {
+    return null;
+  }
+
+  const normalizedVariantId =
+    normalizeVariantId(variantId);
+
+  const normalizedColor =
+    cleanString(selectedColor).toLowerCase();
+
+  /*
+  ================================================
+  FIRST: MATCH VARIANT ID
+  ================================================
+  */
+
+  if (normalizedVariantId) {
+    const variantById =
+      product.variants.find(
+        (variant) =>
+          cleanString(
+            variant.variantId
+          ) === normalizedVariantId
+      );
+
+    if (variantById) {
+      return variantById;
+    }
+  }
+
+  /*
+  ================================================
+  SECOND: MATCH COLOR
+  ================================================
+  */
+
+  if (normalizedColor) {
+    const variantByColor =
+      product.variants.find(
+        (variant) =>
+          cleanString(
+            variant.color
+          ).toLowerCase() ===
+          normalizedColor
+      );
+
+    if (variantByColor) {
+      return variantByColor;
+    }
+  }
+
+  return null;
+};
+
+/*
+==================================================
+VALIDATE PRODUCT ITEM
+==================================================
+*/
+
+const validateProductItem = async (
+  rawItem,
+  index
+) => {
+  const productId =
+    normalizeProductId(
+      rawItem?.productId ??
+        rawItem?.id
+    );
+
+  if (!productId) {
+    throw new Error(
+      `Invalid product ID for item ${
+        index + 1
+      }.`
+    );
+  }
+
+  const quantity =
+    normalizeQuantity(
+      rawItem?.quantity
+    );
+
+  if (!quantity) {
+    throw new Error(
+      `Invalid quantity for product ${productId}.`
+    );
+  }
+
+  const selectedColor =
+    cleanString(
+      rawItem?.selectedColor ??
+        rawItem?.color
+    );
+
+  const selectedColorCode =
+    cleanString(
+      rawItem?.selectedColorCode ??
+        rawItem?.colorCode
+    );
+
+  const selectedSize =
+    cleanString(
+      rawItem?.selectedSize ??
+        rawItem?.size
+    );
+
+  const variantId =
+    normalizeVariantId(
+      rawItem?.variantId ??
+        rawItem?.variant
+    );
+
+  /*
+  ================================================
+  FIND PRODUCT FROM DATABASE
+  ================================================
+  */
+
+  const product =
+    await findProduct(productId);
+
+  if (!product) {
+    throw new Error(
+      `Product ${productId} was not found.`
+    );
+  }
+
+  /*
+  ================================================
+  FIND VARIANT
+  ================================================
+  */
+
+  let variant = null;
+
+  if (
+    variantId ||
+    selectedColor
+  ) {
+    variant = findVariant(
+      product,
+      variantId,
+      selectedColor
+    );
+
+    if (!variant) {
+      throw new Error(
+        `Selected variant was not found for "${product.name}".`
+      );
+    }
+  } else if (
+    Array.isArray(product.variants) &&
+    product.variants.length > 0
+  ) {
+    /*
+    ==============================================
+    PRODUCT HAS VARIANTS BUT CUSTOMER DIDN'T
+    SELECT ONE
+    ==============================================
+    */
+
+    throw new Error(
+      `Please select a variant for "${product.name}".`
+    );
+  }
+
+  /*
+  ================================================
+  ACTUAL PRICE
+  ================================================
+  */
+
+  const actualPrice =
+    variant &&
+    Number.isFinite(
+      Number(variant.price)
+    )
+      ? Number(variant.price)
+      : Number(product.price);
+
+  if (
+    !Number.isFinite(actualPrice) ||
+    actualPrice < 0
+  ) {
+    throw new Error(
+      `Invalid database price for "${product.name}".`
+    );
+  }
+
+  /*
+  ================================================
+  STOCK VALIDATION
+  ================================================
+  */
+
+  let availableStock = 0;
+
+  /*
+  -----------------------------------------------
+  VARIANT + SIZE
+  -----------------------------------------------
+  */
+
+  if (
+    variant &&
+    Array.isArray(variant.sizes) &&
+    variant.sizes.length > 0
+  ) {
+    if (!selectedSize) {
+      throw new Error(
+        `Please select a size for "${product.name}".`
+      );
+    }
+
+    const sizeObject =
+      variant.sizes.find(
+        (size) =>
+          cleanString(size.size) ===
+          selectedSize
+      );
+
+    if (!sizeObject) {
+      throw new Error(
+        `Selected size "${selectedSize}" is not available for "${product.name}".`
+      );
+    }
+
+    availableStock =
+      Number(sizeObject.stock) || 0;
+  }
+
+  /*
+  -----------------------------------------------
+  VARIANT WITHOUT SIZE
+  -----------------------------------------------
+  */
+
+  else if (variant) {
+    availableStock =
+      Number(variant.stock) || 0;
+  }
+
+  /*
+  -----------------------------------------------
+  PRODUCT STOCK
+  -----------------------------------------------
+  */
+
+  else {
+    availableStock =
+      Number(product.stock) || 0;
+  }
+
+  if (quantity > availableStock) {
+    throw new Error(
+      `Insufficient stock for "${product.name}". Available: ${availableStock}, requested: ${quantity}.`
+    );
+  }
+
+  /*
+  ================================================
+  IMAGE
+  ================================================
+  */
+
+  let productImage =
+    cleanString(product.image);
+
+  if (
+    variant &&
+    Array.isArray(variant.images) &&
+    variant.images.length > 0
+  ) {
+    productImage =
+      cleanString(
+        variant.images[0]
+      );
+  }
+
+  /*
+  ================================================
+  FINAL ORDER ITEM
+  ================================================
+  */
+
+  return {
+    product: product._id,
+
+    productId:
+      product.productId,
+
+    productName:
+      product.name,
+
+    productImage,
+
+    variantId:
+      variant
+        ? cleanString(
+            variant.variantId
+          )
+        : "",
+
+    selectedColor:
+      variant
+        ? cleanString(
+            variant.color
+          )
+        : selectedColor,
+
+    selectedColorCode:
+      variant
+        ? cleanString(
+            variant.colorCode
+          )
+        : selectedColorCode,
+
+    selectedSize,
+
+    price: actualPrice,
+
+    quantity,
+
+    subtotal:
+      actualPrice * quantity,
+  };
+};
+
+/*
+==================================================
+DECREASE STOCK
+==================================================
+*/
+
+const decreaseProductStock = async (
+  item
+) => {
+  const product =
+    await Product.findOne({
+      productId: item.productId,
+    });
+
+  if (!product) {
+    throw new Error(
+      `Product ${item.productId} was not found while updating stock.`
+    );
+  }
+
+  /*
+  ================================================
+  FIND VARIANT
+  ================================================
+  */
+
+  let variant = null;
+
+  if (item.variantId) {
+    variant =
+      product.variants.find(
+        (v) =>
+          cleanString(
+            v.variantId
+          ) ===
+          cleanString(
+            item.variantId
+          )
+      );
+  }
+
+  /*
+  ================================================
+  VARIANT + SIZE STOCK
+  ================================================
+  */
+
+  if (
+    variant &&
+    Array.isArray(
+      variant.sizes
+    ) &&
+    variant.sizes.length > 0
+  ) {
+    const sizeObject =
+      variant.sizes.find(
+        (size) =>
+          cleanString(size.size) ===
+          cleanString(
+            item.selectedSize
+          )
+      );
+
+    if (!sizeObject) {
+      throw new Error(
+        `Size "${item.selectedSize}" was not found for "${product.name}".`
+      );
+    }
+
+    if (
+      Number(sizeObject.stock) <
+      item.quantity
+    ) {
+      throw new Error(
+        `Insufficient stock for "${product.name}" size "${item.selectedSize}".`
+      );
+    }
+
+    sizeObject.stock -=
+      item.quantity;
+
+    await product.save();
+
+    return;
+  }
+
+  /*
+  ================================================
+  VARIANT STOCK
+  ================================================
+  */
+
+  if (variant) {
+    if (
+      Number(variant.stock) <
+      item.quantity
+    ) {
+      throw new Error(
+        `Insufficient stock for "${product.name}".`
+      );
+    }
+
+    variant.stock -=
+      item.quantity;
+
+    await product.save();
+
+    return;
+  }
+
+  /*
+  ================================================
+  PRODUCT STOCK
+  ================================================
+  */
+
+  if (
+    Number(product.stock) <
+    item.quantity
+  ) {
+    throw new Error(
+      `Insufficient stock for "${product.name}".`
+    );
+  }
+
+  product.stock -=
+    item.quantity;
+
+  await product.save();
+};
+
 /*
 ==================================================
 POST /api/orders
@@ -41,10 +558,25 @@ CREATE ORDER
 
 router.post("/", async (req, res) => {
   try {
-    console.log("====================================");
-    console.log("NEW ORDER REQUEST:");
-    console.log(JSON.stringify(req.body, null, 2));
-    console.log("====================================");
+    console.log(
+      "===================================="
+    );
+
+    console.log(
+      "NEW ORDER REQUEST:"
+    );
+
+    console.log(
+      JSON.stringify(
+        req.body,
+        null,
+        2
+      )
+    );
+
+    console.log(
+      "===================================="
+    );
 
     const {
       name,
@@ -55,259 +587,157 @@ router.post("/", async (req, res) => {
       note,
 
       productId,
-      productName,
-      productImage,
-      price,
       quantity,
 
       items,
 
-      subtotal,
-      deliveryCharge,
-      total,
-
       source,
       orderSource,
       landingPageId,
+
+      paymentMethod,
     } = req.body;
 
     /*
-    ========================================
+    ================================================
     CUSTOMER DATA
-    ========================================
+    ================================================
     */
 
-    const finalName = cleanString(name);
-    const finalPhone = cleanString(phone);
-    const finalDistrict = cleanString(district);
-    const finalThana = cleanString(thana);
-    const finalAddress = cleanString(address);
-    const finalNote = cleanString(note);
+    const finalName =
+      cleanString(name);
+
+    const finalPhone =
+      cleanString(phone);
+
+    const finalDistrict =
+      cleanString(district);
+
+    const finalThana =
+      cleanString(thana);
+
+    const finalAddress =
+      cleanString(address);
+
+    const finalNote =
+      cleanString(note);
 
     /*
-    ========================================
+    ================================================
     CUSTOMER VALIDATION
-    ========================================
+    ================================================
     */
 
     if (!finalName) {
       return res.status(400).json({
         success: false,
-        message: "Name is required.",
+        message:
+          "Name is required.",
       });
     }
 
     if (!finalPhone) {
       return res.status(400).json({
         success: false,
-        message: "Phone number is required.",
+        message:
+          "Phone number is required.",
       });
     }
 
-    if (!/^01\d{9}$/.test(finalPhone)) {
+    if (
+      !/^01\d{9}$/.test(
+        finalPhone
+      )
+    ) {
       return res.status(400).json({
         success: false,
-        message: "Invalid Bangladesh phone number.",
+        message:
+          "Invalid Bangladesh phone number.",
       });
     }
 
     if (!finalDistrict) {
       return res.status(400).json({
         success: false,
-        message: "District is required.",
+        message:
+          "District is required.",
       });
     }
 
     if (!finalThana) {
       return res.status(400).json({
         success: false,
-        message: "Thana is required.",
+        message:
+          "Thana is required.",
       });
     }
 
     if (!finalAddress) {
       return res.status(400).json({
         success: false,
-        message: "Address is required.",
+        message:
+          "Address is required.",
       });
     }
 
     /*
-    ========================================
-    NORMALIZE ORDER ITEMS
-    ========================================
+    ================================================
+    NORMALIZE RAW ITEMS
+    ================================================
     */
 
-    let finalItems = [];
+    let rawItems = [];
 
     /*
-    ========================================
+    -----------------------------------------------
     CART ORDER
-    ========================================
+    -----------------------------------------------
     */
 
     if (
       Array.isArray(items) &&
       items.length > 0
     ) {
-      finalItems = items.map((item, index) => {
-        const finalProductId =
-          item?.productId ??
-          item?.id ??
-          null;
-
-        const finalProductName =
-          cleanString(
-            item?.productName ??
-              item?.name
-          );
-
-        const finalProductImage =
-          cleanString(
-            item?.productImage ??
-              item?.image
-          );
-
-        const finalPrice =
-          getNumber(item?.price);
-
-        const finalQuantity =
-          getNumber(item?.quantity);
-
-        /*
-        PRICE VALIDATION
-        */
-
-        if (
-          !Number.isFinite(finalPrice) ||
-          finalPrice < 0
-        ) {
-          throw new Error(
-            `Invalid price for item ${
-              index + 1
-            }: ${
-              finalProductName ||
-              "Unknown product"
-            }`
-          );
-        }
-
-        /*
-        QUANTITY VALIDATION
-        */
-
-        if (
-          !Number.isFinite(
-            finalQuantity
-          ) ||
-          finalQuantity < 1
-        ) {
-          throw new Error(
-            `Invalid quantity for item ${
-              index + 1
-            }: ${
-              finalProductName ||
-              "Unknown product"
-            }`
-          );
-        }
-
-        const itemSubtotal =
-          finalPrice *
-          finalQuantity;
-
-        return {
-          productId:
-            finalProductId,
-
-          productName:
-            finalProductName,
-
-          productImage:
-            finalProductImage,
-
-          price:
-            finalPrice,
-
-          quantity:
-            finalQuantity,
-
-          subtotal:
-            itemSubtotal,
-        };
-      });
+      rawItems = items;
     }
 
     /*
-    ========================================
+    -----------------------------------------------
     BUY NOW ORDER
-    ========================================
+    -----------------------------------------------
     */
 
-    else {
-      const finalPrice =
-        getNumber(price);
-
-      const finalQuantity =
-        getNumber(quantity);
-
-      if (
-        !Number.isFinite(finalPrice) ||
-        finalPrice < 0
-      ) {
-        return res.status(400).json({
-          success: false,
-          message:
-            "Invalid product price.",
-        });
-      }
-
-      if (
-        !Number.isFinite(
-          finalQuantity
-        ) ||
-        finalQuantity < 1
-      ) {
-        return res.status(400).json({
-          success: false,
-          message:
-            "Invalid product quantity.",
-        });
-      }
-
-      finalItems = [
+    else if (productId) {
+      rawItems = [
         {
-          productId:
-            productId ?? null,
-
-          productName:
-            cleanString(productName),
-
-          productImage:
-            cleanString(productImage),
-
-          price:
-            finalPrice,
-
+          productId,
           quantity:
-            finalQuantity,
+            quantity || 1,
 
-          subtotal:
-            finalPrice *
-            finalQuantity,
+          variantId:
+            req.body?.variantId,
+
+          selectedColor:
+            req.body?.selectedColor,
+
+          selectedColorCode:
+            req.body?.selectedColorCode,
+
+          selectedSize:
+            req.body?.selectedSize,
         },
       ];
     }
 
     /*
-    ========================================
+    ================================================
     CHECK ITEMS
-    ========================================
+    ================================================
     */
 
     if (
-      !Array.isArray(finalItems) ||
-      finalItems.length === 0
+      !Array.isArray(rawItems) ||
+      rawItems.length === 0
     ) {
       return res.status(400).json({
         success: false,
@@ -317,28 +747,49 @@ router.post("/", async (req, res) => {
     }
 
     /*
-    ========================================
+    ================================================
+    VALIDATE PRODUCTS FROM DATABASE
+    ================================================
+    */
+
+    const finalItems = [];
+
+    for (
+      let index = 0;
+      index < rawItems.length;
+      index++
+    ) {
+      const validatedItem =
+        await validateProductItem(
+          rawItems[index],
+          index
+        );
+
+      finalItems.push(
+        validatedItem
+      );
+    }
+
+    /*
+    ================================================
     CALCULATE SUBTOTAL
-    ========================================
+    ================================================
     */
 
     const calculatedSubtotal =
       finalItems.reduce(
-        (sum, item) => {
-          return (
-            sum +
-            Number(
-              item.subtotal || 0
-            )
-          );
-        },
+        (sum, item) =>
+          sum +
+          Number(
+            item.subtotal || 0
+          ),
         0
       );
 
     /*
-    ========================================
+    ================================================
     DELIVERY CHARGE
-    ========================================
+    ================================================
     */
 
     const calculatedDeliveryCharge =
@@ -349,9 +800,9 @@ router.post("/", async (req, res) => {
         : 100;
 
     /*
-    ========================================
+    ================================================
     TOTAL
-    ========================================
+    ================================================
     */
 
     const calculatedTotal =
@@ -359,18 +810,18 @@ router.post("/", async (req, res) => {
       calculatedDeliveryCharge;
 
     /*
-    ========================================
+    ================================================
     MAIN PRODUCT
-    ========================================
+    ================================================
     */
 
     const firstItem =
       finalItems[0];
 
     /*
-    ========================================
+    ================================================
     CREATE ORDER
-    ========================================
+    ================================================
     */
 
     const newOrder =
@@ -401,38 +852,35 @@ router.post("/", async (req, res) => {
         MAIN PRODUCT
         */
 
+        product:
+          firstItem.product,
+
         productId:
-          productId ??
-          firstItem.productId ??
-          null,
+          firstItem.productId,
 
         productName:
-          productName
-            ? cleanString(
-                productName
-              )
-            : firstItem.productName,
+          firstItem.productName,
 
         productImage:
-          productImage
-            ? cleanString(
-                productImage
-              )
-            : firstItem.productImage,
+          firstItem.productImage,
+
+        variantId:
+          firstItem.variantId,
+
+        selectedColor:
+          firstItem.selectedColor,
+
+        selectedColorCode:
+          firstItem.selectedColorCode,
+
+        selectedSize:
+          firstItem.selectedSize,
 
         price:
-          Number.isFinite(
-            getNumber(price)
-          )
-            ? getNumber(price)
-            : firstItem.price,
+          firstItem.price,
 
         quantity:
-          Number.isFinite(
-            getNumber(quantity)
-          )
-            ? getNumber(quantity)
-            : firstItem.quantity,
+          firstItem.quantity,
 
         /*
         ITEMS
@@ -462,24 +910,41 @@ router.post("/", async (req, res) => {
           "pending",
 
         /*
-        ORDER SOURCE
+        PAYMENT
+        */
+
+        paymentMethod:
+          cleanString(
+            paymentMethod
+          ) || "cod",
+
+        paymentStatus:
+          "pending",
+
+        /*
+        SOURCE
         */
 
         source:
-          source || "website",
+          cleanString(
+            source
+          ) || "website",
 
         orderSource:
-          orderSource ||
-          "website",
+          cleanString(
+            orderSource
+          ) || "website",
 
         landingPageId:
-          landingPageId || "",
+          cleanString(
+            landingPageId
+          ),
       });
 
     /*
-    ========================================
-    SAVE ORDER
-    ========================================
+    ================================================
+    SAVE ORDER FIRST
+    ================================================
     */
 
     const savedOrder =
@@ -491,9 +956,53 @@ router.post("/", async (req, res) => {
     );
 
     /*
-    ========================================
+    ================================================
+    DECREASE STOCK
+    ================================================
+    */
+
+    try {
+      for (
+        const item of finalItems
+      ) {
+        await decreaseProductStock(
+          item
+        );
+      }
+
+      console.log(
+        "PRODUCT STOCK UPDATED"
+      );
+    } catch (stockError) {
+      console.error(
+        "STOCK UPDATE ERROR:",
+        stockError
+      );
+
+      /*
+      ============================================
+      IMPORTANT:
+      ORDER EXISTS BUT STOCK UPDATE FAILED
+      ============================================
+      */
+
+      await Order.findByIdAndUpdate(
+        savedOrder._id,
+        {
+          $set: {
+            note:
+              finalNote
+                ? `${finalNote} | Stock update warning: ${stockError.message}`
+                : `Stock update warning: ${stockError.message}`,
+          },
+        }
+      );
+    }
+
+    /*
+    ================================================
     RESPONSE
-    ========================================
+    ================================================
     */
 
     return res.status(201).json({
@@ -512,9 +1021,9 @@ router.post("/", async (req, res) => {
     );
 
     /*
-    ========================================
-    CUSTOM VALIDATION ERROR
-    ========================================
+    ================================================
+    CUSTOM ERROR
+    ================================================
     */
 
     if (
@@ -529,9 +1038,9 @@ router.post("/", async (req, res) => {
     }
 
     /*
-    ========================================
+    ================================================
     MONGOOSE VALIDATION ERROR
-    ========================================
+    ================================================
     */
 
     if (
@@ -560,9 +1069,26 @@ router.post("/", async (req, res) => {
     }
 
     /*
-    ========================================
+    ================================================
+    INVALID OBJECT ID
+    ================================================
+    */
+
+    if (
+      error instanceof
+        mongoose.Error.CastError
+    ) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Invalid order ID.",
+      });
+    }
+
+    /*
+    ================================================
     DEFAULT ERROR
-    ========================================
+    ================================================
     */
 
     return res.status(500).json({
@@ -588,6 +1114,10 @@ router.get("/", async (req, res) => {
   try {
     const orders =
       await Order.find()
+        .populate(
+          "product",
+          "productId name brand category image price variants"
+        )
         .sort({
           createdAt: -1,
         });
@@ -640,13 +1170,15 @@ router.post(
       }
 
       /*
-      ========================================
+      ============================================
       PHONE VALIDATION
-      ========================================
+      ============================================
       */
 
       if (
-        !/^01\d{9}$/.test(phone)
+        !/^01\d{9}$/.test(
+          phone
+        )
       ) {
         return res.status(400).json({
           success: false,
@@ -763,9 +1295,9 @@ router.post(
       } = req.body;
 
       /*
-      ========================================
+      ============================================
       VALIDATION
-      ========================================
+      ============================================
       */
 
       if (!consignment_id) {
@@ -778,28 +1310,48 @@ router.post(
       }
 
       /*
-      ========================================
+      ============================================
       FIND ORDER
-      ========================================
+      ============================================
       */
+
+      const searchConditions = [
+        {
+          consignmentId:
+            String(
+              consignment_id
+            ),
+        },
+
+        {
+          trackingCode:
+            String(
+              consignment_id
+            ),
+        },
+      ];
+
+      /*
+      ============================================
+      INVOICE AS OBJECT ID
+      ============================================
+      */
+
+      if (
+        invoice &&
+        mongoose.Types.ObjectId.isValid(
+          invoice
+        )
+      ) {
+        searchConditions.push({
+          _id: invoice,
+        });
+      }
 
       const order =
         await Order.findOne({
-          $or: [
-            {
-              consignmentId:
-                consignment_id,
-            },
-
-            {
-              trackingCode:
-                consignment_id,
-            },
-
-            {
-              _id: invoice,
-            },
-          ],
+          $or:
+            searchConditions,
         });
 
       if (!order) {
@@ -812,18 +1364,18 @@ router.post(
       }
 
       /*
-      ========================================
+      ============================================
       UPDATE COURIER STATUS
-      ========================================
+      ============================================
       */
 
       order.courierStatus =
-        status || null;
+        status || "";
 
       /*
-      ========================================
+      ============================================
       NORMALIZE STATUS
-      ========================================
+      ============================================
       */
 
       const normalizedStatus =
@@ -834,9 +1386,9 @@ router.post(
           .toLowerCase();
 
       /*
-      ========================================
+      ============================================
       DELIVERED
-      ========================================
+      ============================================
       */
 
       if (
@@ -850,9 +1402,9 @@ router.post(
       }
 
       /*
-      ========================================
+      ============================================
       RETURNED
-      ========================================
+      ============================================
       */
 
       if (
@@ -866,9 +1418,9 @@ router.post(
       }
 
       /*
-      ========================================
+      ============================================
       COURIER HISTORY
-      ========================================
+      ============================================
       */
 
       if (
@@ -892,9 +1444,9 @@ router.post(
       });
 
       /*
-      ========================================
+      ============================================
       SAVE
-      ========================================
+      ============================================
       */
 
       await order.save();
@@ -950,9 +1502,9 @@ router.post(
       }
 
       /*
-      ========================================
+      ============================================
       ALREADY CONFIRMED
-      ========================================
+      ============================================
       */
 
       if (
@@ -970,9 +1522,9 @@ router.post(
       }
 
       /*
-      ========================================
-      PREVENT CONFIRMING FINAL STATES
-      ========================================
+      ============================================
+      PREVENT FINAL STATES
+      ============================================
       */
 
       if (
@@ -994,9 +1546,9 @@ router.post(
       }
 
       /*
-      ========================================
-      CONFIRM ORDER
-      ========================================
+      ============================================
+      CONFIRM
+      ============================================
       */
 
       order.status =
@@ -1008,12 +1560,6 @@ router.post(
         "ORDER CONFIRMED:",
         order._id.toString()
       );
-
-      /*
-      ========================================
-      RESPONSE
-      ========================================
-      */
 
       return res.json({
         success: true,
@@ -1068,9 +1614,9 @@ router.post(
       }
 
       /*
-      ========================================
+      ============================================
       PREVENT DUPLICATE PARCEL
-      ========================================
+      ============================================
       */
 
       if (
@@ -1088,9 +1634,9 @@ router.post(
       }
 
       /*
-      ========================================
+      ============================================
       CREATE PARCEL
-      ========================================
+      ============================================
       */
 
       const parcel =
@@ -1099,9 +1645,9 @@ router.post(
         );
 
       /*
-      ========================================
+      ============================================
       UPDATE ORDER
-      ========================================
+      ============================================
       */
 
       order.courier =
@@ -1118,21 +1664,21 @@ router.post(
         parcel?.consignment
           ?.consignment_id ||
         parcel?.consignment_id ||
-        null;
+        "";
 
       order.trackingCode =
         parcel?.consignment
           ?.tracking_code ||
         parcel?.tracking_code ||
-        null;
+        "";
 
       order.parcelError =
-        null;
+        "";
 
       /*
-      ========================================
+      ============================================
       SAVE
-      ========================================
+      ============================================
       */
 
       await order.save();
@@ -1160,9 +1706,9 @@ router.post(
       );
 
       /*
-      ========================================
+      ============================================
       SAVE PARCEL ERROR
-      ========================================
+      ============================================
       */
 
       try {
@@ -1207,6 +1753,9 @@ router.get(
       const order =
         await Order.findById(
           req.params.id
+        ).populate(
+          "product",
+          "productId name brand category image price variants"
         );
 
       if (!order) {
@@ -1253,10 +1802,71 @@ router.put(
   "/:id",
   async (req, res) => {
     try {
+      /*
+      ============================================
+      ALLOWED FIELDS ONLY
+      ============================================
+      */
+
+      const allowedFields = [
+        "name",
+        "phone",
+        "district",
+        "thana",
+        "address",
+        "note",
+
+        "status",
+
+        "paymentMethod",
+        "paymentStatus",
+
+        "courier",
+        "courierStatus",
+        "consignmentId",
+        "trackingCode",
+
+        "printStatus",
+        "printedAt",
+
+        "returnReason",
+        "refundAmount",
+        "refundStatus",
+
+        "source",
+        "orderSource",
+        "landingPageId",
+        "tenantId",
+      ];
+
+      const updateData = {};
+
+      for (
+        const field of allowedFields
+      ) {
+        if (
+          Object.prototype.hasOwnProperty.call(
+            req.body,
+            field
+          )
+        ) {
+          updateData[field] =
+            req.body[field];
+        }
+      }
+
+      /*
+      ============================================
+      UPDATE
+      ============================================
+      */
+
       const updatedOrder =
         await Order.findByIdAndUpdate(
           req.params.id,
-          req.body,
+          {
+            $set: updateData,
+          },
           {
             new: true,
 
@@ -1290,9 +1900,9 @@ router.put(
       );
 
       /*
-      ========================================
+      ============================================
       MONGOOSE VALIDATION ERROR
-      ========================================
+      ============================================
       */
 
       if (
@@ -1390,9 +2000,8 @@ router.delete(
 
 /*
 ==================================================
-EXPORT ROUTER
+EXPORT
 ==================================================
 */
 
 module.exports = router;
-
