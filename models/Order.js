@@ -1,127 +1,5 @@
+
 const mongoose = require("mongoose");
-
-const orderItemSchema = new mongoose.Schema(
-  {
-    productId: {
-      type: String,
-      default: "",
-    },
-
-    productName: {
-      type: String,
-      default: "",
-    },
-
-    productImage: {
-      type: String,
-      default: "",
-    },
-
-    price: {
-      type: Number,
-      default: 0,
-    },
-
-    quantity: {
-      type: Number,
-      default: 1,
-    },
-  },
-  { _id: false }
-);
-
-const orderSchema = new mongoose.Schema(
-  {
-    // Customer Information
-    name: {
-      type: String,
-      required: true,
-      trim: true,
-    },
-
-    phone: {
-      type: String,
-      required: true,
-      trim: true,
-    },
-
-    district: {
-      type: String,
-      default: "",
-      trim: true,
-    },
-
-    thana: {
-      type: String,
-      default: "",
-      trim: true,
-    },
-
-    address: {
-      type: String,
-      default: "",
-      trim: true,
-    },
-
-    note: {
-      type: String,
-      default: "",
-      trim: true,
-    },
-
-    // Product Information
-    productId: {
-      type: String,
-      default: "",
-    },
-
-    productName: {
-      type: String,
-      default: "",
-    },
-
-    productImage: {
-      type: String,
-      default: "",
-    },
-
-    price: {
-      type: Number,
-      default: 0,
-    },
-
-    quantity: {
-      type: Number,
-      default: 1,
-    },
-
-    // Multiple Items
-    items: {
-      type: [orderItemSchema],
-      default: [],
-    },
-
-    // Payment / Amount
-    subtotal: {
-      type: Number,
-      default: 0,
-    },
-
-    deliveryCharge: {
-      type: Number,
-      default: 0,
-    },
-
-    total: {
-      type: Number,
-      default: 0,
-    },
-
-    // Order Status
-    status: {
-      type: String,
-      enum: [
-        "pending",
 
 /*
 ==================================================
@@ -131,24 +9,14 @@ ORDER ITEM SCHEMA
 
 const orderItemSchema = new mongoose.Schema(
   {
-    /*
-    ================================================
-    PRODUCT REFERENCE
-    ================================================
-    */
-
+    // Product Reference
     product: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Product",
       default: null,
     },
 
-    /*
-    ================================================
-    PRODUCT DATA SNAPSHOT
-    ================================================
-    */
-
+    // Product Data Snapshot
     productId: {
       type: Number,
       default: null,
@@ -166,12 +34,7 @@ const orderItemSchema = new mongoose.Schema(
       trim: true,
     },
 
-    /*
-    ================================================
-    VARIANT
-    ================================================
-    */
-
+    // Variant
     variantId: {
       type: String,
       default: "",
@@ -196,36 +59,21 @@ const orderItemSchema = new mongoose.Schema(
       trim: true,
     },
 
-    /*
-    ================================================
-    PRICE
-    ================================================
-    */
-
+    // Price
     price: {
       type: Number,
       required: true,
       min: 0,
     },
 
-    /*
-    ================================================
-    QUANTITY
-    ================================================
-    */
-
+    // Quantity
     quantity: {
       type: Number,
       required: true,
       min: 1,
     },
 
-    /*
-    ================================================
-    ITEM SUBTOTAL
-    ================================================
-    */
-
+    // Item Subtotal
     subtotal: {
       type: Number,
       required: true,
@@ -239,7 +87,7 @@ const orderItemSchema = new mongoose.Schema(
 
 /*
 ==================================================
-COURIER HISTORY
+COURIER HISTORY SCHEMA
 ==================================================
 */
 
@@ -335,41 +183,55 @@ const orderSchema = new mongoose.Schema(
     productName: {
       type: String,
       default: "",
+      trim: true,
     },
 
     productImage: {
       type: String,
       default: "",
+      trim: true,
     },
+
+    /*
+    ================================================
+    MAIN PRODUCT VARIANT
+    ================================================
+    */
 
     variantId: {
       type: String,
       default: "",
+      trim: true,
     },
 
     selectedColor: {
       type: String,
       default: "",
+      trim: true,
     },
 
     selectedColorCode: {
       type: String,
       default: "",
+      trim: true,
     },
 
     selectedSize: {
       type: String,
       default: "",
+      trim: true,
     },
 
     price: {
       type: Number,
       default: 0,
+      min: 0,
     },
 
     quantity: {
       type: Number,
       default: 1,
+      min: 1,
     },
 
     /*
@@ -460,21 +322,31 @@ const orderSchema = new mongoose.Schema(
     source: {
       type: String,
       default: "website",
+      trim: true,
     },
 
     orderSource: {
       type: String,
       default: "website",
+      trim: true,
     },
 
     landingPageId: {
       type: String,
       default: "",
+      trim: true,
     },
+
+    /*
+    ================================================
+    TENANT
+    ================================================
+    */
 
     tenantId: {
       type: String,
       default: "",
+      trim: true,
     },
 
     /*
@@ -486,21 +358,25 @@ const orderSchema = new mongoose.Schema(
     courier: {
       type: String,
       default: "",
+      trim: true,
     },
 
     courierStatus: {
       type: String,
       default: "",
+      trim: true,
     },
 
     consignmentId: {
       type: String,
       default: "",
+      trim: true,
     },
 
     trackingCode: {
       type: String,
       default: "",
+      trim: true,
     },
 
     parcelCreatedAt: {
@@ -511,6 +387,7 @@ const orderSchema = new mongoose.Schema(
     parcelError: {
       type: String,
       default: "",
+      trim: true,
     },
 
     courierHistory: {
@@ -543,11 +420,13 @@ const orderSchema = new mongoose.Schema(
     returnReason: {
       type: String,
       default: "",
+      trim: true,
     },
 
     refundAmount: {
       type: Number,
       default: 0,
+      min: 0,
     },
 
     refundStatus: {
@@ -566,90 +445,10 @@ const orderSchema = new mongoose.Schema(
   }
 );
 
-module.exports = mongoose.model(
-  "Order",
-  orderSchema
-);
-        "confirmed",
-        "processing",
-        "shipped",
-        "delivered",
-        "returned",
-        "cancelled",
-        "duplicate",
-      ],
-      default: "pending",
-    },
-
-    // Source
-    source: {
-      type: String,
-      default: "website",
-    },
-
-    orderSource: {
-      type: String,
-      default: "website",
-    },
-
-    landingPageId: {
-      type: String,
-      default: "",
-    },
-
-    // Tenant
-    tenantId: {
-      type: String,
-      default: "",
-    },
-
-    // Courier
-    courier: {
-      type: String,
-      default: "",
-    },
-
-    trackingCode: {
-      type: String,
-      default: "",
-    },
-
-    parcelCreatedAt: {
-      type: Date,
-      default: null,
-    },
-
-    // Printing
-    printStatus: {
-      type: Boolean,
-      default: false,
-    },
-
-    printedAt: {
-      type: Date,
-      default: null,
-    },
-
-    // Return Information
-    returnReason: {
-      type: String,
-      default: "",
-    },
-
-    refundAmount: {
-      type: Number,
-      default: 0,
-    },
-
-    refundStatus: {
-      type: String,
-      enum: ["pending", "processing", "refunded", "rejected"],
-      default: "pending",
-    },
-  },
-  {
-    timestamps: true,
-  }
-);
+/*
+==================================================
+MODEL EXPORT
+==================================================
+*/
 
 module.exports = mongoose.model("Order", orderSchema);
