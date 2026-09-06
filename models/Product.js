@@ -1,19 +1,11 @@
 const mongoose = require("mongoose");
 
-/*
-==================================================
-SIZE SCHEMA
-==================================================
-*/
-
 const sizeSchema = new mongoose.Schema(
   {
     size: {
       type: String,
-      required: true,
       trim: true,
     },
-
     stock: {
       type: Number,
       default: 0,
@@ -22,12 +14,6 @@ const sizeSchema = new mongoose.Schema(
   },
   { _id: false }
 );
-
-/*
-==================================================
-VARIANT SCHEMA
-==================================================
-*/
 
 const variantSchema = new mongoose.Schema(
   {
@@ -51,7 +37,7 @@ const variantSchema = new mongoose.Schema(
 
     price: {
       type: Number,
-      required: true,
+      default: 0,
       min: 0,
     },
 
@@ -80,100 +66,14 @@ const variantSchema = new mongoose.Schema(
   { _id: false }
 );
 
-/*
-==================================================
-DETAILS SCHEMA
-==================================================
-*/
-
-const detailsSchema = new mongoose.Schema(
-  {
-    shortDescription: {
-      type: String,
-      default: "",
-      trim: true,
-    },
-
-    overview: {
-      type: String,
-      default: "",
-      trim: true,
-    },
-
-    features: {
-      type: [String],
-      default: [],
-    },
-
-    specifications: {
-      type: mongoose.Schema.Types.Mixed,
-      default: {},
-    },
-
-    howToUse: {
-      type: String,
-      default: "",
-      trim: true,
-    },
-
-    careInstructions: {
-      type: String,
-      default: "",
-      trim: true,
-    },
-
-    whatsIncluded: {
-      type: [String],
-      default: [],
-    },
-
-    deliveryInfo: {
-      type: String,
-      default: "",
-      trim: true,
-    },
-
-    returnPolicy: {
-      type: String,
-      default: "",
-      trim: true,
-    },
-
-    warranty: {
-      type: String,
-      default: "",
-      trim: true,
-    },
-  },
-  { _id: false }
-);
-
-/*
-==================================================
-PRODUCT SCHEMA
-==================================================
-*/
-
 const productSchema = new mongoose.Schema(
   {
-    /*
-    ================================================
-    STABLE PRODUCT ID
-    ================================================
-    */
-
     productId: {
       type: Number,
       required: true,
       unique: true,
       index: true,
     },
-
-    /*
-    ================================================
-    BASIC INFO
-    ================================================
-    */
 
     name: {
       type: String,
@@ -193,12 +93,6 @@ const productSchema = new mongoose.Schema(
       trim: true,
     },
 
-    /*
-    ================================================
-    PRICE
-    ================================================
-    */
-
     price: {
       type: Number,
       required: true,
@@ -217,23 +111,11 @@ const productSchema = new mongoose.Schema(
       min: 0,
     },
 
-    /*
-    ================================================
-    STOCK
-    ================================================
-    */
-
     stock: {
       type: Number,
       default: 0,
       min: 0,
     },
-
-    /*
-    ================================================
-    RATING
-    ================================================
-    */
 
     rating: {
       type: Number,
@@ -248,12 +130,6 @@ const productSchema = new mongoose.Schema(
       min: 0,
     },
 
-    /*
-    ================================================
-    FLAGS
-    ================================================
-    */
-
     isNew: {
       type: Boolean,
       default: false,
@@ -264,16 +140,9 @@ const productSchema = new mongoose.Schema(
       default: false,
     },
 
-    /*
-    ================================================
-    IMAGE
-    ================================================
-    */
-
     image: {
       type: String,
       default: "",
-      trim: true,
     },
 
     images: {
@@ -281,16 +150,9 @@ const productSchema = new mongoose.Schema(
       default: [],
     },
 
-    /*
-    ================================================
-    DESCRIPTION
-    ================================================
-    */
-
     description: {
       type: String,
       default: "",
-      trim: true,
     },
 
     tags: {
@@ -298,38 +160,92 @@ const productSchema = new mongoose.Schema(
       default: [],
     },
 
-    /*
-    ================================================
-    VARIANTS
-    ================================================
-    */
-
     variants: {
       type: [variantSchema],
       default: [],
     },
 
-    /*
-    ================================================
-    DETAILS
-    ================================================
-    */
-
     details: {
-      type: detailsSchema,
-      default: () => ({}),
+      shortDescription: {
+        type: String,
+        default: "",
+      },
+
+      overview: {
+        type: String,
+        default: "",
+      },
+
+      features: {
+        type: [String],
+        default: [],
+      },
+
+      specifications: {
+        type: mongoose.Schema.Types.Mixed,
+        default: {},
+      },
+
+      howToUse: {
+        type: [String],
+        default: [],
+      },
+
+      careInstructions: {
+        type: [String],
+        default: [],
+      },
+
+      whatsIncluded: {
+        type: [String],
+        default: [],
+      },
+
+      deliveryInfo: {
+        type: String,
+        default: "",
+      },
+
+      returnPolicy: {
+        type: String,
+        default: "",
+      },
+
+      warranty: {
+        type: String,
+        default: "",
+      },
     },
 
-    /*
-    ================================================
-    TENANT
-    ================================================
-    */
+    // Admin fields
+    sku: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+
+    barcode: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+
+    costPrice: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+
+    supplier: {
+      type: String,
+      default: "",
+      trim: true,
+    },
 
     tenantId: {
       type: String,
       default: "",
-      index: true,
+      trim: true,
     },
   },
   {

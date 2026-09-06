@@ -1,97 +1,6 @@
-
 const mongoose = require("mongoose");
 
-/*
-==================================================
-ORDER ITEM SCHEMA
-==================================================
-*/
-
-const orderItemSchema = new mongoose.Schema(
-  {
-    // Product Reference
-    product: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "Product",
-      default: null,
-    },
-
-    // Product Data Snapshot
-    productId: {
-      type: Number,
-      default: null,
-    },
-
-    productName: {
-      type: String,
-      default: "",
-      trim: true,
-    },
-
-    productImage: {
-      type: String,
-      default: "",
-      trim: true,
-    },
-
-    // Variant
-    variantId: {
-      type: String,
-      default: "",
-      trim: true,
-    },
-
-    selectedColor: {
-      type: String,
-      default: "",
-      trim: true,
-    },
-
-    selectedColorCode: {
-      type: String,
-      default: "",
-      trim: true,
-    },
-
-    selectedSize: {
-      type: String,
-      default: "",
-      trim: true,
-    },
-
-    // Price
-    price: {
-      type: Number,
-      required: true,
-      min: 0,
-    },
-
-    // Quantity
-    quantity: {
-      type: Number,
-      required: true,
-      min: 1,
-    },
-
-    // Item Subtotal
-    subtotal: {
-      type: Number,
-      required: true,
-      min: 0,
-    },
-  },
-  {
-    _id: false,
-  }
-);
-
-/*
-==================================================
-COURIER HISTORY SCHEMA
-==================================================
-*/
-
-const courierHistorySchema = new mongoose.Schema(
+const courierEventSchema = new mongoose.Schema(
   {
     status: {
       type: String,
@@ -108,25 +17,76 @@ const courierHistorySchema = new mongoose.Schema(
       default: Date.now,
     },
   },
-  {
-    _id: false,
-  }
+  { _id: false }
 );
 
-/*
-==================================================
-ORDER SCHEMA
-==================================================
-*/
+const orderItemSchema = new mongoose.Schema(
+  {
+    product: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Product",
+      default: null,
+    },
+
+    productId: {
+      type: Number,
+      required: true,
+    },
+
+    productName: {
+      type: String,
+      default: "",
+    },
+
+    productImage: {
+      type: String,
+      default: "",
+    },
+
+    variantId: {
+      type: String,
+      default: "",
+    },
+
+    selectedColor: {
+      type: String,
+      default: "",
+    },
+
+    selectedColorCode: {
+      type: String,
+      default: "",
+    },
+
+    selectedSize: {
+      type: String,
+      default: "",
+    },
+
+    price: {
+      type: Number,
+      required: true,
+      min: 0,
+    },
+
+    quantity: {
+      type: Number,
+      required: true,
+      min: 1,
+    },
+
+    subtotal: {
+      type: Number,
+      required: true,
+      min: 0,
+    },
+  },
+  { _id: false }
+);
 
 const orderSchema = new mongoose.Schema(
   {
-    /*
-    ================================================
-    CUSTOMER
-    ================================================
-    */
-
+    // Customer
     name: {
       type: String,
       required: true,
@@ -163,12 +123,7 @@ const orderSchema = new mongoose.Schema(
       trim: true,
     },
 
-    /*
-    ================================================
-    MAIN PRODUCT
-    ================================================
-    */
-
+    // Product backward compatibility
     product: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Product",
@@ -183,43 +138,31 @@ const orderSchema = new mongoose.Schema(
     productName: {
       type: String,
       default: "",
-      trim: true,
     },
 
     productImage: {
       type: String,
       default: "",
-      trim: true,
     },
-
-    /*
-    ================================================
-    MAIN PRODUCT VARIANT
-    ================================================
-    */
 
     variantId: {
       type: String,
       default: "",
-      trim: true,
     },
 
     selectedColor: {
       type: String,
       default: "",
-      trim: true,
     },
 
     selectedColorCode: {
       type: String,
       default: "",
-      trim: true,
     },
 
     selectedSize: {
       type: String,
       default: "",
-      trim: true,
     },
 
     price: {
@@ -234,22 +177,11 @@ const orderSchema = new mongoose.Schema(
       min: 1,
     },
 
-    /*
-    ================================================
-    ORDER ITEMS
-    ================================================
-    */
-
+    // Multiple products
     items: {
       type: [orderItemSchema],
       default: [],
     },
-
-    /*
-    ================================================
-    MONEY
-    ================================================
-    */
 
     subtotal: {
       type: Number,
@@ -263,41 +195,36 @@ const orderSchema = new mongoose.Schema(
       min: 0,
     },
 
+    additionalDiscount: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+
+    advanceAmount: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+
     total: {
       type: Number,
       default: 0,
       min: 0,
     },
 
-    /*
-    ================================================
-    PAYMENT
-    ================================================
-    */
-
+    // Payment
     paymentMethod: {
       type: String,
       default: "cod",
-      trim: true,
     },
 
     paymentStatus: {
       type: String,
-      enum: [
-        "pending",
-        "paid",
-        "failed",
-        "refunded",
-      ],
       default: "pending",
     },
 
-    /*
-    ================================================
-    ORDER STATUS
-    ================================================
-    */
-
+    // Order status
     status: {
       type: String,
       enum: [
@@ -313,70 +240,65 @@ const orderSchema = new mongoose.Schema(
       default: "pending",
     },
 
-    /*
-    ================================================
-    ORDER SOURCE
-    ================================================
-    */
-
+    // Source
     source: {
       type: String,
+      enum: [
+        "phone",
+        "whatsapp",
+        "facebook",
+        "website",
+        "walkin",
+        "other",
+      ],
       default: "website",
-      trim: true,
     },
 
     orderSource: {
       type: String,
       default: "website",
-      trim: true,
     },
 
     landingPageId: {
       type: String,
       default: "",
-      trim: true,
     },
-
-    /*
-    ================================================
-    TENANT
-    ================================================
-    */
 
     tenantId: {
       type: String,
       default: "",
-      trim: true,
     },
 
-    /*
-    ================================================
-    COURIER
-    ================================================
-    */
-
-    courier: {
+    // Admin order
+    officeOrderNote: {
       type: String,
       default: "",
-      trim: true,
+    },
+
+    createdBy: {
+      type: String,
+      default: null,
+    },
+
+    // Courier
+    courier: {
+      type: String,
+      default: null,
     },
 
     courierStatus: {
       type: String,
-      default: "",
-      trim: true,
+      default: null,
     },
 
     consignmentId: {
       type: String,
-      default: "",
-      trim: true,
+      default: null,
     },
 
     trackingCode: {
       type: String,
-      default: "",
-      trim: true,
+      default: null,
     },
 
     parcelCreatedAt: {
@@ -386,24 +308,25 @@ const orderSchema = new mongoose.Schema(
 
     parcelError: {
       type: String,
-      default: "",
-      trim: true,
+      default: null,
     },
 
     courierHistory: {
-      type: [courierHistorySchema],
+      type: [courierEventSchema],
       default: [],
     },
 
-    /*
-    ================================================
-    PRINT
-    ================================================
-    */
-
+    // Print
     printStatus: {
-      type: Boolean,
-      default: false,
+      type: String,
+      enum: [
+        "not_printed",
+        "queued",
+        "printing",
+        "printed",
+        "failed",
+      ],
+      default: "not_printed",
     },
 
     printedAt: {
@@ -411,16 +334,10 @@ const orderSchema = new mongoose.Schema(
       default: null,
     },
 
-    /*
-    ================================================
-    RETURN / REFUND
-    ================================================
-    */
-
+    // Return / refund
     returnReason: {
       type: String,
       default: "",
-      trim: true,
     },
 
     refundAmount: {
@@ -444,11 +361,5 @@ const orderSchema = new mongoose.Schema(
     timestamps: true,
   }
 );
-
-/*
-==================================================
-MODEL EXPORT
-==================================================
-*/
 
 module.exports = mongoose.model("Order", orderSchema);

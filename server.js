@@ -1,7 +1,6 @@
 const express = require("express");
 const mongoose = require("mongoose");
 const cors = require("cors");
-
 require("dotenv").config();
 
 const app = express();
@@ -25,9 +24,7 @@ BODY PARSER
 ==================================================
 */
 
-app.use(
-  express.json()
-);
+app.use(express.json());
 
 app.use(
   express.urlencoded({
@@ -37,7 +34,7 @@ app.use(
 
 /*
 ==================================================
-HOME
+HEALTH CHECK
 ==================================================
 */
 
@@ -45,8 +42,7 @@ app.get("/", (req, res) => {
   res.json({
     success: true,
     status: "ok",
-    service:
-      "spriengge-backend",
+    service: "spriengge-backend",
     message:
       "Backend is running successfully",
   });
@@ -69,19 +65,13 @@ app.use(
 ==================================================
 */
 
-app.use(
-  (req, res) => {
-    res.status(404).json({
-      success: false,
-
-      message:
-        "API route not found",
-
-      path:
-        req.originalUrl,
-    });
-  }
-);
+app.use((req, res) => {
+  res.status(404).json({
+    success: false,
+    message: "API route not found",
+    path: req.originalUrl,
+  });
+});
 
 /*
 ==================================================
@@ -98,12 +88,9 @@ app.use(
 
     res.status(500).json({
       success: false,
-
       message:
         "Internal server error",
-
-      error:
-        err.message,
+      error: err.message,
     });
   }
 );
@@ -118,9 +105,7 @@ const PORT =
   process.env.PORT || 5000;
 
 mongoose
-  .connect(
-    process.env.MONGO_URI
-  )
+  .connect(process.env.MONGO_URI)
   .then(() => {
     console.log(
       "===================================="
@@ -134,22 +119,19 @@ mongoose
       "===================================="
     );
 
-    app.listen(
-      PORT,
-      () => {
-        console.log(
-          "===================================="
-        );
+    app.listen(PORT, () => {
+      console.log(
+        "===================================="
+      );
 
-        console.log(
-          `Server running on port ${PORT}`
-        );
+      console.log(
+        `Server running on port ${PORT}`
+      );
 
-        console.log(
-          "===================================="
-        );
-      }
-    );
+      console.log(
+        "===================================="
+      );
+    });
   })
   .catch((err) => {
     console.error(
@@ -160,9 +142,7 @@ mongoose
       "MongoDB Connection Error:"
     );
 
-    console.error(
-      err.message
-    );
+    console.error(err.message);
 
     console.error(
       "===================================="
