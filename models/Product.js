@@ -1,19 +1,35 @@
 const mongoose = require("mongoose");
 
+/*
+==================================================
+SIZE SCHEMA
+==================================================
+*/
+
 const sizeSchema = new mongoose.Schema(
   {
     size: {
       type: String,
       trim: true,
+      default: "",
     },
+
     stock: {
       type: Number,
       default: 0,
       min: 0,
     },
   },
-  { _id: false }
+  {
+    _id: false,
+  }
 );
+
+/*
+==================================================
+VARIANT SCHEMA
+==================================================
+*/
 
 const variantSchema = new mongoose.Schema(
   {
@@ -63,17 +79,36 @@ const variantSchema = new mongoose.Schema(
       default: [],
     },
   },
-  { _id: false }
+  {
+    _id: false,
+  }
 );
+
+/*
+==================================================
+PRODUCT SCHEMA
+==================================================
+*/
 
 const productSchema = new mongoose.Schema(
   {
+    /*
+    ----------------------------------------------
+    MAIN PRODUCT ID
+    ----------------------------------------------
+    */
     productId: {
       type: Number,
       required: true,
       unique: true,
       index: true,
     },
+
+    /*
+    ----------------------------------------------
+    BASIC INFORMATION
+    ----------------------------------------------
+    */
 
     name: {
       type: String,
@@ -93,6 +128,12 @@ const productSchema = new mongoose.Schema(
       trim: true,
     },
 
+    /*
+    ----------------------------------------------
+    PRICE
+    ----------------------------------------------
+    */
+
     price: {
       type: Number,
       required: true,
@@ -111,11 +152,23 @@ const productSchema = new mongoose.Schema(
       min: 0,
     },
 
+    /*
+    ----------------------------------------------
+    STOCK
+    ----------------------------------------------
+    */
+
     stock: {
       type: Number,
       default: 0,
       min: 0,
     },
+
+    /*
+    ----------------------------------------------
+    RATING
+    ----------------------------------------------
+    */
 
     rating: {
       type: Number,
@@ -130,6 +183,12 @@ const productSchema = new mongoose.Schema(
       min: 0,
     },
 
+    /*
+    ----------------------------------------------
+    FLAGS
+    ----------------------------------------------
+    */
+
     isNew: {
       type: Boolean,
       default: false,
@@ -139,6 +198,12 @@ const productSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+
+    /*
+    ----------------------------------------------
+    IMAGES
+    ----------------------------------------------
+    */
 
     image: {
       type: String,
@@ -150,6 +215,12 @@ const productSchema = new mongoose.Schema(
       default: [],
     },
 
+    /*
+    ----------------------------------------------
+    DESCRIPTION
+    ----------------------------------------------
+    */
+
     description: {
       type: String,
       default: "",
@@ -160,10 +231,22 @@ const productSchema = new mongoose.Schema(
       default: [],
     },
 
+    /*
+    ----------------------------------------------
+    VARIANTS
+    ----------------------------------------------
+    */
+
     variants: {
       type: [variantSchema],
       default: [],
     },
+
+    /*
+    ----------------------------------------------
+    DETAILS
+    ----------------------------------------------
+    */
 
     details: {
       shortDescription: {
@@ -217,7 +300,12 @@ const productSchema = new mongoose.Schema(
       },
     },
 
-    // Admin fields
+    /*
+    ----------------------------------------------
+    ADMIN INFORMATION
+    ----------------------------------------------
+    */
+
     sku: {
       type: String,
       default: "",
@@ -248,6 +336,7 @@ const productSchema = new mongoose.Schema(
       trim: true,
     },
   },
+
   {
     timestamps: true,
   }

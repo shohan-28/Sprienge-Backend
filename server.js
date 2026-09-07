@@ -1,6 +1,7 @@
 const express = require("express");
 const mongoose = require("mongoose");
 const cors = require("cors");
+
 require("dotenv").config();
 
 const app = express();
@@ -47,6 +48,17 @@ app.get("/", (req, res) => {
       "Backend is running successfully",
   });
 });
+
+/*
+==================================================
+PRODUCT ROUTES
+==================================================
+*/
+
+app.use(
+  "/api/products",
+  require("./routes/productRoutes")
+);
 
 /*
 ==================================================
