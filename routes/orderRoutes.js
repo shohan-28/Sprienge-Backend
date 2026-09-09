@@ -14,43 +14,49 @@ const {
 
 /*
 ==================================================
-HELPER FUNCTIONS
+HELPERS
 ==================================================
 */
 
 const cleanString = (value) => {
-  if (value === undefined || value === null) {
+  if (
+    value === undefined ||
+    value === null
+  ) {
     return "";
   }
 
   return String(value).trim();
 };
 
-const getNumber = (value) => {
-  const number = Number(value);
-
-  return Number.isFinite(number)
-    ? number
-    : NaN;
-};
-
-const normalizeProductId = (value) => {
+const normalizeProductId = (
+  value
+) => {
   const id = Number(value);
 
-  return Number.isInteger(id) && id > 0
+  return Number.isInteger(id) &&
+    id > 0
     ? id
     : null;
 };
 
-const normalizeQuantity = (value) => {
-  const quantity = Number(value);
+const normalizeQuantity = (
+  value
+) => {
+  const quantity = Number(
+    value
+  );
 
-  return Number.isInteger(quantity) && quantity > 0
+  return Number.isInteger(
+    quantity
+  ) && quantity > 0
     ? quantity
     : null;
 };
 
-const normalizeVariantId = (value) => {
+const normalizeVariantId = (
+  value
+) => {
   return cleanString(value);
 };
 
@@ -60,17 +66,21 @@ FIND PRODUCT
 ==================================================
 */
 
-const findProduct = async (productId) => {
-  const normalizedId = normalizeProductId(
-    productId
-  );
+const findProduct = async (
+  productId
+) => {
+  const normalizedId =
+    normalizeProductId(
+      productId
+    );
 
   if (!normalizedId) {
     return null;
   }
 
   return await Product.findOne({
-    productId: normalizedId,
+    productId:
+      normalizedId,
   });
 };
 
@@ -87,22 +97,28 @@ const findVariant = (
 ) => {
   if (
     !product ||
-    !Array.isArray(product.variants) ||
+    !Array.isArray(
+      product.variants
+    ) ||
     product.variants.length === 0
   ) {
     return null;
   }
 
   const normalizedVariantId =
-    normalizeVariantId(variantId);
+    normalizeVariantId(
+      variantId
+    );
 
   const normalizedColor =
-    cleanString(selectedColor).toLowerCase();
+    cleanString(
+      selectedColor
+    ).toLowerCase();
 
   /*
-  ================================================
-  FIRST: MATCH VARIANT ID
-  ================================================
+  ----------------------------------------------
+  FIRST: VARIANT ID
+  ----------------------------------------------
   */
 
   if (normalizedVariantId) {
@@ -111,7 +127,8 @@ const findVariant = (
         (variant) =>
           cleanString(
             variant.variantId
-          ) === normalizedVariantId
+          ) ===
+          normalizedVariantId
       );
 
     if (variantById) {
@@ -120,9 +137,9 @@ const findVariant = (
   }
 
   /*
-  ================================================
-  SECOND: MATCH COLOR
-  ================================================
+  ----------------------------------------------
+  SECOND: COLOR
+  ----------------------------------------------
   */
 
   if (normalizedColor) {
@@ -145,963 +162,1278 @@ const findVariant = (
 
 /*
 ==================================================
-VALIDATE PRODUCT ITEM
+GET ITEM AVAILABLE STOCK
 ==================================================
 */
 
-const validateProductItem = async (
-  rawItem,
-  index
+const getItemAvailableStock = (
+  product,
+  variant,
+  selectedSize
 ) => {
-  const productId =
-    normalizeProductId(
-      rawItem?.productId ??
-        rawItem?.id
-    );
-
-  if (!productId) {
-    throw new Error(
-      `Invalid product ID for item ${
-        index + 1
-      }.`
-    );
-  }
-
-  const quantity =
-    normalizeQuantity(
-      rawItem?.quantity
-    );
-
-  if (!quantity) {
-    throw new Error(
-      `Invalid quantity for product ${productId}.`
-    );
-  }
-
-  const selectedColor =
-    cleanString(
-      rawItem?.selectedColor ??
-        rawItem?.color
-    );
-
-  const selectedColorCode =
-    cleanString(
-      rawItem?.selectedColorCode ??
-        rawItem?.colorCode
-    );
-
-  const selectedSize =
-    cleanString(
-      rawItem?.selectedSize ??
-        rawItem?.size
-    );
-
-  const variantId =
-    normalizeVariantId(
-      rawItem?.variantId ??
-        rawItem?.variant
-    );
-
   /*
-  ================================================
-  FIND PRODUCT FROM DATABASE
-  ================================================
+  ==============================================
+  PRODUCT WITHOUT VARIANT
+  ==============================================
   */
 
-  const product =
-    await findProduct(productId);
-
-  if (!product) {
-    throw new Error(
-      `Product ${productId} was not found.`
+  if (!variant) {
+    return Number(
+      product.stock || 0
     );
   }
 
   /*
-  ================================================
-  FIND VARIANT
-  ================================================
-  */
-
-  let variant = null;
-
-  if (
-    variantId ||
-    selectedColor
-  ) {
-    variant = findVariant(
-      product,
-      variantId,
-      selectedColor
-    );
-
-    if (!variant) {
-      throw new Error(
-        `Selected variant was not found for "${product.name}".`
-      );
-    }
-  } else if (
-    Array.isArray(product.variants) &&
-    product.variants.length > 0
-  ) {
-    /*
-    ==============================================
-    PRODUCT HAS VARIANTS BUT CUSTOMER DIDN'T
-    SELECT ONE
-    ==============================================
-    */
-
-    throw new Error(
-      `Please select a variant for "${product.name}".`
-    );
-  }
-
-  /*
-  ================================================
-  ACTUAL PRICE
-  ================================================
-  */
-
-  const actualPrice =
-    variant &&
-    Number.isFinite(
-      Number(variant.price)
-    )
-      ? Number(variant.price)
-      : Number(product.price);
-
-  if (
-    !Number.isFinite(actualPrice) ||
-    actualPrice < 0
-  ) {
-    throw new Error(
-      `Invalid database price for "${product.name}".`
-    );
-  }
-
-  /*
-  ================================================
-  STOCK VALIDATION
-  ================================================
-  */
-
-  let availableStock = 0;
-
-  /*
-  -----------------------------------------------
-  VARIANT + SIZE
-  -----------------------------------------------
+  ==============================================
+  VARIANT WITH SIZES
+  ==============================================
   */
 
   if (
-    variant &&
-    Array.isArray(variant.sizes) &&
-    variant.sizes.length > 0
-  ) {
-    if (!selectedSize) {
-      throw new Error(
-        `Please select a size for "${product.name}".`
-      );
-    }
-
-    const sizeObject =
-      variant.sizes.find(
-        (size) =>
-          cleanString(size.size) ===
-          selectedSize
-      );
-
-    if (!sizeObject) {
-      throw new Error(
-        `Selected size "${selectedSize}" is not available for "${product.name}".`
-      );
-    }
-
-    availableStock =
-      Number(sizeObject.stock) || 0;
-  }
-
-  /*
-  -----------------------------------------------
-  VARIANT WITHOUT SIZE
-  -----------------------------------------------
-  */
-
-  else if (variant) {
-    availableStock =
-      Number(variant.stock) || 0;
-  }
-
-  /*
-  -----------------------------------------------
-  PRODUCT STOCK
-  -----------------------------------------------
-  */
-
-  else {
-    availableStock =
-      Number(product.stock) || 0;
-  }
-
-  if (quantity > availableStock) {
-    throw new Error(
-      `Insufficient stock for "${product.name}". Available: ${availableStock}, requested: ${quantity}.`
-    );
-  }
-
-  /*
-  ================================================
-  IMAGE
-  ================================================
-  */
-
-  let productImage =
-    cleanString(product.image);
-
-  if (
-    variant &&
-    Array.isArray(variant.images) &&
-    variant.images.length > 0
-  ) {
-    productImage =
-      cleanString(
-        variant.images[0]
-      );
-  }
-
-  /*
-  ================================================
-  FINAL ORDER ITEM
-  ================================================
-  */
-
-  return {
-    product: product._id,
-
-    productId:
-      product.productId,
-
-    productName:
-      product.name,
-
-    productImage,
-
-    variantId:
-      variant
-        ? cleanString(
-            variant.variantId
-          )
-        : "",
-
-    selectedColor:
-      variant
-        ? cleanString(
-            variant.color
-          )
-        : selectedColor,
-
-    selectedColorCode:
-      variant
-        ? cleanString(
-            variant.colorCode
-          )
-        : selectedColorCode,
-
-    selectedSize,
-
-    price: actualPrice,
-
-    quantity,
-
-    subtotal:
-      actualPrice * quantity,
-  };
-};
-
-/*
-==================================================
-DECREASE STOCK
-==================================================
-*/
-
-const decreaseProductStock = async (
-  item
-) => {
-  const product =
-    await Product.findOne({
-      productId: item.productId,
-    });
-
-  if (!product) {
-    throw new Error(
-      `Product ${item.productId} was not found while updating stock.`
-    );
-  }
-
-  /*
-  ================================================
-  FIND VARIANT
-  ================================================
-  */
-
-  let variant = null;
-
-  if (item.variantId) {
-    variant =
-      product.variants.find(
-        (v) =>
-          cleanString(
-            v.variantId
-          ) ===
-          cleanString(
-            item.variantId
-          )
-      );
-  }
-
-  /*
-  ================================================
-  VARIANT + SIZE STOCK
-  ================================================
-  */
-
-  if (
-    variant &&
     Array.isArray(
       variant.sizes
     ) &&
     variant.sizes.length > 0
   ) {
+    const normalizedSize =
+      cleanString(
+        selectedSize
+      );
+
+    if (!normalizedSize) {
+      return 0;
+    }
+
     const sizeObject =
       variant.sizes.find(
         (size) =>
-          cleanString(size.size) ===
           cleanString(
-            item.selectedSize
-          )
+            size.size
+          ).toLowerCase() ===
+          normalizedSize.toLowerCase()
       );
 
     if (!sizeObject) {
-      throw new Error(
-        `Size "${item.selectedSize}" was not found for "${product.name}".`
-      );
+      return 0;
     }
 
-    if (
-      Number(sizeObject.stock) <
-      item.quantity
-    ) {
-      throw new Error(
-        `Insufficient stock for "${product.name}" size "${item.selectedSize}".`
-      );
-    }
-
-    sizeObject.stock -=
-      item.quantity;
-
-    await product.save();
-
-    return;
-  }
-
-  /*
-  ================================================
-  VARIANT STOCK
-  ================================================
-  */
-
-  if (variant) {
-    if (
-      Number(variant.stock) <
-      item.quantity
-    ) {
-      throw new Error(
-        `Insufficient stock for "${product.name}".`
-      );
-    }
-
-    variant.stock -=
-      item.quantity;
-
-    await product.save();
-
-    return;
-  }
-
-  /*
-  ================================================
-  PRODUCT STOCK
-  ================================================
-  */
-
-  if (
-    Number(product.stock) <
-    item.quantity
-  ) {
-    throw new Error(
-      `Insufficient stock for "${product.name}".`
+    return Number(
+      sizeObject.stock || 0
     );
   }
 
-  product.stock -=
-    item.quantity;
+  /*
+  ==============================================
+  VARIANT WITHOUT SIZE
+  ==============================================
+  */
 
-  await product.save();
+  return Number(
+    variant.stock || 0
+  );
 };
+
+/*
+==================================================
+VALIDATE PRODUCT ITEM
+==================================================
+*/
+
+const validateProductItem =
+  async (
+    rawItem,
+    index
+  ) => {
+    const productId =
+      normalizeProductId(
+        rawItem?.productId ??
+          rawItem?.id
+      );
+
+    if (!productId) {
+      throw new Error(
+        `Invalid product ID for item ${
+          index + 1
+        }.`
+      );
+    }
+
+    const quantity =
+      normalizeQuantity(
+        rawItem?.quantity
+      );
+
+    if (!quantity) {
+      throw new Error(
+        `Invalid quantity for product ${productId}.`
+      );
+    }
+
+    const selectedColor =
+      cleanString(
+        rawItem?.selectedColor ??
+          rawItem?.color
+      );
+
+    const selectedColorCode =
+      cleanString(
+        rawItem?.selectedColorCode ??
+          rawItem?.colorCode
+      );
+
+    const selectedSize =
+      cleanString(
+        rawItem?.selectedSize ??
+          rawItem?.size
+      );
+
+    const variantId =
+      normalizeVariantId(
+        rawItem?.variantId ??
+          rawItem?.variant
+      );
+
+    /*
+    ==============================================
+    DATABASE PRODUCT
+    ==============================================
+    */
+
+    const product =
+      await findProduct(
+        productId
+      );
+
+    if (!product) {
+      throw new Error(
+        `Product ${productId} was not found.`
+      );
+    }
+
+    /*
+    ==============================================
+    FIND VARIANT
+    ==============================================
+    */
+
+    let variant = null;
+
+    if (
+      variantId ||
+      selectedColor
+    ) {
+      variant =
+        findVariant(
+          product,
+          variantId,
+          selectedColor
+        );
+
+      if (!variant) {
+        throw new Error(
+          `Selected variant was not found for "${product.name}".`
+        );
+      }
+    } else if (
+      Array.isArray(
+        product.variants
+      ) &&
+      product.variants.length > 0
+    ) {
+      throw new Error(
+        `Please select a variant for "${product.name}".`
+      );
+    }
+
+    /*
+    ==============================================
+    SIZE REQUIRED
+    ==============================================
+    */
+
+    if (
+      variant &&
+      Array.isArray(
+        variant.sizes
+      ) &&
+      variant.sizes.length > 0 &&
+      !selectedSize
+    ) {
+      throw new Error(
+        `Please select a size for "${product.name}".`
+      );
+    }
+
+    /*
+    ==============================================
+    PRICE
+    ==============================================
+    */
+
+    const variantPrice =
+      variant
+        ? Number(
+            variant.price
+          )
+        : NaN;
+
+    const productPrice =
+      Number(
+        product.price
+      );
+
+    const actualPrice =
+      variant &&
+      Number.isFinite(
+        variantPrice
+      ) &&
+      variantPrice > 0
+        ? variantPrice
+        : productPrice;
+
+    if (
+      !Number.isFinite(
+        actualPrice
+      ) ||
+      actualPrice < 0
+    ) {
+      throw new Error(
+        `Invalid database price for "${product.name}".`
+      );
+    }
+
+    /*
+    ==============================================
+    STOCK
+    ==============================================
+    */
+
+    const availableStock =
+      getItemAvailableStock(
+        product,
+        variant,
+        selectedSize
+      );
+
+    /*
+    SIZE EXISTS CHECK
+    */
+
+    if (
+      variant &&
+      Array.isArray(
+        variant.sizes
+      ) &&
+      variant.sizes.length > 0
+    ) {
+      const sizeObject =
+        variant.sizes.find(
+          (size) =>
+            cleanString(
+              size.size
+            ).toLowerCase() ===
+            selectedSize.toLowerCase()
+        );
+
+      if (!sizeObject) {
+        throw new Error(
+          `Selected size "${selectedSize}" is not available for "${product.name}".`
+        );
+      }
+    }
+
+    if (
+      quantity >
+      availableStock
+    ) {
+      throw new Error(
+        `Insufficient stock for "${product.name}". Available: ${availableStock}, requested: ${quantity}.`
+      );
+    }
+
+    /*
+    ==============================================
+    IMAGE
+    ==============================================
+    */
+
+    let productImage =
+      cleanString(
+        product.image
+      );
+
+    if (
+      variant &&
+      Array.isArray(
+        variant.images
+      ) &&
+      variant.images.length > 0
+    ) {
+      productImage =
+        cleanString(
+          variant.images[0]
+        );
+    }
+
+    /*
+    ==============================================
+    FINAL ITEM
+    ==============================================
+    */
+
+    return {
+      product:
+        product._id,
+
+      productId:
+        product.productId,
+
+      productName:
+        product.name,
+
+      productImage,
+
+      variantId:
+        variant
+          ? cleanString(
+              variant.variantId
+            )
+          : "",
+
+      selectedColor:
+        variant
+          ? cleanString(
+              variant.color
+            )
+          : selectedColor,
+
+      selectedColorCode:
+        variant
+          ? cleanString(
+              variant.colorCode
+            )
+          : selectedColorCode,
+
+      selectedSize,
+
+      price:
+        actualPrice,
+
+      quantity,
+
+      subtotal:
+        actualPrice *
+        quantity,
+    };
+  };
+
+/*
+==================================================
+DECREASE STOCK FOR CONFIRMATION
+==================================================
+
+IMPORTANT:
+
+This function is called ONLY when
+order is confirmed.
+
+Create Order does NOT call this.
+==================================================
+*/
+
+const decreaseProductStock =
+  async (item) => {
+    const product =
+      await Product.findOne({
+        productId:
+          item.productId,
+      });
+
+    if (!product) {
+      throw new Error(
+        `Product ${item.productId} was not found while updating stock.`
+      );
+    }
+
+    /*
+    ==============================================
+    NO VARIANT
+    ==============================================
+    */
+
+    if (
+      !item.variantId
+    ) {
+      const quantity =
+        Number(
+          item.quantity
+        );
+
+      const updatedProduct =
+        await Product.findOneAndUpdate(
+          {
+            _id:
+              product._id,
+
+            stock: {
+              $gte:
+                quantity,
+            },
+          },
+          {
+            $inc: {
+              stock:
+                -quantity,
+            },
+          },
+          {
+            new: true,
+          }
+        );
+
+      if (!updatedProduct) {
+        const latest =
+          await Product.findById(
+            product._id
+          )
+            .select(
+              "stock name"
+            )
+            .lean();
+
+        throw new Error(
+          `Insufficient stock for "${product.name}". Available: ${Number(
+            latest?.stock || 0
+          )}, requested: ${quantity}.`
+        );
+      }
+
+      return updatedProduct;
+    }
+
+    /*
+    ==============================================
+    FIND VARIANT
+    ==============================================
+    */
+
+    const variantIndex =
+      product.variants.findIndex(
+        (variant) =>
+          cleanString(
+            variant.variantId
+          ) ===
+          cleanString(
+            item.variantId
+          )
+      );
+
+    if (
+      variantIndex === -1
+    ) {
+      throw new Error(
+        `Variant "${item.variantId}" was not found for "${product.name}".`
+      );
+    }
+
+    const variant =
+      product.variants[
+        variantIndex
+      ];
+
+    /*
+    ==============================================
+    VARIANT WITH SIZE
+    ==============================================
+    */
+
+    if (
+      Array.isArray(
+        variant.sizes
+      ) &&
+      variant.sizes.length > 0
+    ) {
+      const sizeIndex =
+        variant.sizes.findIndex(
+          (size) =>
+            cleanString(
+              size.size
+            ).toLowerCase() ===
+            cleanString(
+              item.selectedSize
+            ).toLowerCase()
+        );
+
+      if (
+        sizeIndex === -1
+      ) {
+        throw new Error(
+          `Size "${item.selectedSize}" was not found for "${product.name}".`
+        );
+      }
+
+      const currentStock =
+        Number(
+          variant.sizes[
+            sizeIndex
+          ].stock || 0
+        );
+
+      const quantity =
+        Number(
+          item.quantity
+        );
+
+      if (
+        currentStock <
+        quantity
+      ) {
+        throw new Error(
+          `Insufficient stock for "${product.name}" - ${variant.color || item.variantId} / ${item.selectedSize}. Available: ${currentStock}, requested: ${quantity}.`
+        );
+      }
+
+      /*
+      --------------------------------------------
+      ATOMIC SIZE UPDATE
+      --------------------------------------------
+      */
+
+      const updatedProduct =
+        await Product.findOneAndUpdate(
+          {
+            _id:
+              product._id,
+
+            variants: {
+              $elemMatch: {
+                variantId:
+                  item.variantId,
+
+                sizes: {
+                  $elemMatch: {
+                    size:
+                      item.selectedSize,
+
+                    stock: {
+                      $gte:
+                        quantity,
+                    },
+                  },
+                },
+              },
+            },
+          },
+          {
+            $inc: {
+              "variants.$[variant].sizes.$[size].stock":
+                -quantity,
+            },
+          },
+          {
+            arrayFilters: [
+              {
+                "variant.variantId":
+                  item.variantId,
+              },
+              {
+                "size.size":
+                  item.selectedSize,
+
+                "size.stock": {
+                  $gte:
+                    quantity,
+                },
+              },
+            ],
+
+            new: true,
+          }
+        );
+
+      if (!updatedProduct) {
+        throw new Error(
+          `Stock changed before confirmation for "${product.name}" - ${variant.color || item.variantId} / ${item.selectedSize}. Please try again.`
+        );
+      }
+
+      /*
+      --------------------------------------------
+      SYNC PRODUCT TOTAL STOCK
+      --------------------------------------------
+      */
+
+      const totalStock =
+        updatedProduct.variants.reduce(
+          (
+            total,
+            currentVariant
+          ) => {
+            if (
+              Array.isArray(
+                currentVariant.sizes
+              ) &&
+              currentVariant.sizes
+                .length > 0
+            ) {
+              return (
+                total +
+                currentVariant.sizes.reduce(
+                  (
+                    sizeTotal,
+                    size
+                  ) =>
+                    sizeTotal +
+                    Number(
+                      size.stock ||
+                        0
+                    ),
+                  0
+                )
+              );
+            }
+
+            return (
+              total +
+              Number(
+                currentVariant.stock ||
+                  0
+              )
+            );
+          },
+          0
+        );
+
+      updatedProduct.stock =
+        totalStock;
+
+      await updatedProduct.save();
+
+      return updatedProduct;
+    }
+
+    /*
+    ==============================================
+    VARIANT WITHOUT SIZE
+    ==============================================
+    */
+
+    const quantity =
+      Number(
+        item.quantity
+      );
+
+    const updatedProduct =
+      await Product.findOneAndUpdate(
+        {
+          _id:
+            product._id,
+
+          variants: {
+            $elemMatch: {
+              variantId:
+                item.variantId,
+
+              stock: {
+                $gte:
+                  quantity,
+              },
+            },
+          },
+        },
+        {
+          $inc: {
+            "variants.$[variant].stock":
+              -quantity,
+          },
+        },
+        {
+          arrayFilters: [
+            {
+              "variant.variantId":
+                item.variantId,
+
+              "variant.stock": {
+                $gte:
+                  quantity,
+              },
+            },
+          ],
+
+          new: true,
+        }
+      );
+
+    if (!updatedProduct) {
+      throw new Error(
+        `Insufficient stock for "${product.name}" - ${
+          variant.color ||
+          item.variantId
+        }.`
+      );
+    }
+
+    /*
+    ----------------------------------------------
+    SYNC PRODUCT TOTAL
+    ----------------------------------------------
+    */
+
+    const totalStock =
+      updatedProduct.variants.reduce(
+        (
+          total,
+          currentVariant
+        ) => {
+          if (
+            Array.isArray(
+              currentVariant.sizes
+            ) &&
+            currentVariant.sizes
+              .length > 0
+          ) {
+            return (
+              total +
+              currentVariant.sizes.reduce(
+                (
+                  sizeTotal,
+                  size
+                ) =>
+                  sizeTotal +
+                  Number(
+                    size.stock ||
+                      0
+                  ),
+                0
+              )
+            );
+          }
+
+          return (
+            total +
+            Number(
+              currentVariant.stock ||
+                0
+            )
+          );
+        },
+        0
+      );
+
+    updatedProduct.stock =
+      totalStock;
+
+    await updatedProduct.save();
+
+    return updatedProduct;
+  };
 
 /*
 ==================================================
 POST /api/orders
 CREATE ORDER
 ==================================================
+
+IMPORTANT:
+
+NO STOCK DEDUCTION HERE.
+
+Stock will be deducted only
+when admin confirms the order.
+==================================================
 */
 
-router.post("/", async (req, res) => {
-  try {
-    console.log(
-      "===================================="
-    );
+router.post(
+  "/",
+  async (req, res) => {
+    try {
+      console.log(
+        "===================================="
+      );
 
-    console.log(
-      "NEW ORDER REQUEST:"
-    );
+      console.log(
+        "NEW ORDER REQUEST:"
+      );
 
-    console.log(
-      JSON.stringify(
-        req.body,
-        null,
-        2
-      )
-    );
+      console.log(
+        JSON.stringify(
+          req.body,
+          null,
+          2
+        )
+      );
 
-    console.log(
-      "===================================="
-    );
+      console.log(
+        "===================================="
+      );
 
-    const {
-      name,
-      phone,
-      district,
-      thana,
-      address,
-      note,
+      const {
+        name,
+        phone,
+        district,
+        thana,
+        address,
+        note,
 
-      productId,
-      quantity,
+        productId,
+        quantity,
 
-      items,
+        items,
 
-      source,
-      orderSource,
-      landingPageId,
+        source,
+        orderSource,
+        landingPageId,
 
-      paymentMethod,
-    } = req.body;
+        paymentMethod,
+      } = req.body;
 
-    /*
-    ================================================
-    CUSTOMER DATA
-    ================================================
-    */
+      /*
+      ==============================================
+      CUSTOMER
+      ==============================================
+      */
 
-    const finalName =
-      cleanString(name);
+      const finalName =
+        cleanString(name);
 
-    const finalPhone =
-      cleanString(phone);
+      const finalPhone =
+        cleanString(phone);
 
-    const finalDistrict =
-      cleanString(district);
-
-    const finalThana =
-      cleanString(thana);
-
-    const finalAddress =
-      cleanString(address);
-
-    const finalNote =
-      cleanString(note);
-
-    /*
-    ================================================
-    CUSTOMER VALIDATION
-    ================================================
-    */
-
-    if (!finalName) {
-      return res.status(400).json({
-        success: false,
-        message:
-          "Name is required.",
-      });
-    }
-
-    if (!finalPhone) {
-      return res.status(400).json({
-        success: false,
-        message:
-          "Phone number is required.",
-      });
-    }
-
-    if (
-      !/^01\d{9}$/.test(
-        finalPhone
-      )
-    ) {
-      return res.status(400).json({
-        success: false,
-        message:
-          "Invalid Bangladesh phone number.",
-      });
-    }
-
-    if (!finalDistrict) {
-      return res.status(400).json({
-        success: false,
-        message:
-          "District is required.",
-      });
-    }
-
-    if (!finalThana) {
-      return res.status(400).json({
-        success: false,
-        message:
-          "Thana is required.",
-      });
-    }
-
-    if (!finalAddress) {
-      return res.status(400).json({
-        success: false,
-        message:
-          "Address is required.",
-      });
-    }
-
-    /*
-    ================================================
-    NORMALIZE RAW ITEMS
-    ================================================
-    */
-
-    let rawItems = [];
-
-    /*
-    -----------------------------------------------
-    CART ORDER
-    -----------------------------------------------
-    */
-
-    if (
-      Array.isArray(items) &&
-      items.length > 0
-    ) {
-      rawItems = items;
-    }
-
-    /*
-    -----------------------------------------------
-    BUY NOW ORDER
-    -----------------------------------------------
-    */
-
-    else if (productId) {
-      rawItems = [
-        {
-          productId,
-          quantity:
-            quantity || 1,
-
-          variantId:
-            req.body?.variantId,
-
-          selectedColor:
-            req.body?.selectedColor,
-
-          selectedColorCode:
-            req.body?.selectedColorCode,
-
-          selectedSize:
-            req.body?.selectedSize,
-        },
-      ];
-    }
-
-    /*
-    ================================================
-    CHECK ITEMS
-    ================================================
-    */
-
-    if (
-      !Array.isArray(rawItems) ||
-      rawItems.length === 0
-    ) {
-      return res.status(400).json({
-        success: false,
-        message:
-          "No valid products found in order.",
-      });
-    }
-
-    /*
-    ================================================
-    VALIDATE PRODUCTS FROM DATABASE
-    ================================================
-    */
-
-    const finalItems = [];
-
-    for (
-      let index = 0;
-      index < rawItems.length;
-      index++
-    ) {
-      const validatedItem =
-        await validateProductItem(
-          rawItems[index],
-          index
+      const finalDistrict =
+        cleanString(
+          district
         );
 
-      finalItems.push(
-        validatedItem
-      );
-    }
+      const finalThana =
+        cleanString(thana);
 
-    /*
-    ================================================
-    CALCULATE SUBTOTAL
-    ================================================
-    */
+      const finalAddress =
+        cleanString(
+          address
+        );
 
-    const calculatedSubtotal =
-      finalItems.reduce(
-        (sum, item) =>
-          sum +
-          Number(
-            item.subtotal || 0
-          ),
-        0
-      );
+      const finalNote =
+        cleanString(note);
 
-    /*
-    ================================================
-    DELIVERY CHARGE
-    ================================================
-    */
+      /*
+      ==============================================
+      VALIDATION
+      ==============================================
+      */
 
-    const calculatedDeliveryCharge =
-      finalDistrict
-        .toLowerCase()
-        .includes("dhaka")
-        ? 60
-        : 100;
+      if (!finalName) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Name is required.",
+        });
+      }
 
-    /*
-    ================================================
-    TOTAL
-    ================================================
-    */
+      if (!finalPhone) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Phone number is required.",
+        });
+      }
 
-    const calculatedTotal =
-      calculatedSubtotal +
-      calculatedDeliveryCharge;
-
-    /*
-    ================================================
-    MAIN PRODUCT
-    ================================================
-    */
-
-    const firstItem =
-      finalItems[0];
-
-    /*
-    ================================================
-    CREATE ORDER
-    ================================================
-    */
-
-    const newOrder =
-      new Order({
-        /*
-        CUSTOMER
-        */
-
-        name:
-          finalName,
-
-        phone:
-          finalPhone,
-
-        district:
-          finalDistrict,
-
-        thana:
-          finalThana,
-
-        address:
-          finalAddress,
-
-        note:
-          finalNote,
-
-        /*
-        MAIN PRODUCT
-        */
-
-        product:
-          firstItem.product,
-
-        productId:
-          firstItem.productId,
-
-        productName:
-          firstItem.productName,
-
-        productImage:
-          firstItem.productImage,
-
-        variantId:
-          firstItem.variantId,
-
-        selectedColor:
-          firstItem.selectedColor,
-
-        selectedColorCode:
-          firstItem.selectedColorCode,
-
-        selectedSize:
-          firstItem.selectedSize,
-
-        price:
-          firstItem.price,
-
-        quantity:
-          firstItem.quantity,
-
-        /*
-        ITEMS
-        */
-
-        items:
-          finalItems,
-
-        /*
-        MONEY
-        */
-
-        subtotal:
-          calculatedSubtotal,
-
-        deliveryCharge:
-          calculatedDeliveryCharge,
-
-        total:
-          calculatedTotal,
-
-        /*
-        STATUS
-        */
-
-        status:
-          "pending",
-
-        /*
-        PAYMENT
-        */
-
-        paymentMethod:
-          cleanString(
-            paymentMethod
-          ) || "cod",
-
-        paymentStatus:
-          "pending",
-
-        /*
-        SOURCE
-        */
-
-        source:
-          cleanString(
-            source
-          ) || "website",
-
-        orderSource:
-          cleanString(
-            orderSource
-          ) || "website",
-
-        landingPageId:
-          cleanString(
-            landingPageId
-          ),
-      });
-
-    /*
-    ================================================
-    SAVE ORDER FIRST
-    ================================================
-    */
-
-    const savedOrder =
-      await newOrder.save();
-
-    console.log(
-      "ORDER SAVED:",
-      savedOrder._id.toString()
-    );
-
-    /*
-    ================================================
-    DECREASE STOCK
-    ================================================
-    */
-
-    try {
-      for (
-        const item of finalItems
+      if (
+        !/^01\d{9}$/.test(
+          finalPhone
+        )
       ) {
-        await decreaseProductStock(
-          item
+        return res.status(400).json({
+          success: false,
+          message:
+            "Invalid Bangladesh phone number.",
+        });
+      }
+
+      if (!finalDistrict) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "District is required.",
+        });
+      }
+
+      if (!finalThana) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Thana is required.",
+        });
+      }
+
+      if (!finalAddress) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Address is required.",
+        });
+      }
+
+      /*
+      ==============================================
+      RAW ITEMS
+      ==============================================
+      */
+
+      let rawItems = [];
+
+      if (
+        Array.isArray(items) &&
+        items.length > 0
+      ) {
+        rawItems = items;
+      } else if (
+        productId
+      ) {
+        rawItems = [
+          {
+            productId,
+            quantity:
+              quantity || 1,
+
+            variantId:
+              req.body
+                ?.variantId,
+
+            selectedColor:
+              req.body
+                ?.selectedColor,
+
+            selectedColorCode:
+              req.body
+                ?.selectedColorCode,
+
+            selectedSize:
+              req.body
+                ?.selectedSize,
+          },
+        ];
+      }
+
+      if (
+        !Array.isArray(
+          rawItems
+        ) ||
+        rawItems.length === 0
+      ) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "No valid products found in order.",
+        });
+      }
+
+      /*
+      ==============================================
+      VALIDATE ALL PRODUCTS
+      ==============================================
+      */
+
+      const finalItems = [];
+
+      for (
+        let index = 0;
+        index <
+        rawItems.length;
+        index++
+      ) {
+        const validatedItem =
+          await validateProductItem(
+            rawItems[index],
+            index
+          );
+
+        finalItems.push(
+          validatedItem
         );
       }
 
+      /*
+      ==============================================
+      SUBTOTAL
+      ==============================================
+      */
+
+      const calculatedSubtotal =
+        finalItems.reduce(
+          (
+            sum,
+            item
+          ) =>
+            sum +
+            Number(
+              item.subtotal ||
+                0
+            ),
+          0
+        );
+
+      /*
+      ==============================================
+      DELIVERY
+      ==============================================
+      */
+
+      const calculatedDeliveryCharge =
+        finalDistrict
+          .toLowerCase()
+          .includes("dhaka")
+          ? 60
+          : 100;
+
+      /*
+      ==============================================
+      TOTAL
+      ==============================================
+      */
+
+      const calculatedTotal =
+        calculatedSubtotal +
+        calculatedDeliveryCharge;
+
+      /*
+      ==============================================
+      FIRST ITEM
+      ==============================================
+      */
+
+      const firstItem =
+        finalItems[0];
+
+      /*
+      ==============================================
+      CREATE ORDER
+      ==============================================
+      */
+
+      const newOrder =
+        new Order({
+          name:
+            finalName,
+
+          phone:
+            finalPhone,
+
+          district:
+            finalDistrict,
+
+          thana:
+            finalThana,
+
+          address:
+            finalAddress,
+
+          note:
+            finalNote,
+
+          /*
+          ------------------------------------------
+          BACKWARD COMPATIBILITY
+          ------------------------------------------
+          */
+
+          product:
+            firstItem.product,
+
+          productId:
+            firstItem.productId,
+
+          productName:
+            firstItem.productName,
+
+          productImage:
+            firstItem.productImage,
+
+          variantId:
+            firstItem.variantId,
+
+          selectedColor:
+            firstItem.selectedColor,
+
+          selectedColorCode:
+            firstItem.selectedColorCode,
+
+          selectedSize:
+            firstItem.selectedSize,
+
+          price:
+            firstItem.price,
+
+          quantity:
+            firstItem.quantity,
+
+          /*
+          ------------------------------------------
+          ITEMS
+          ------------------------------------------
+          */
+
+          items:
+            finalItems,
+
+          /*
+          ------------------------------------------
+          MONEY
+          ------------------------------------------
+          */
+
+          subtotal:
+            calculatedSubtotal,
+
+          deliveryCharge:
+            calculatedDeliveryCharge,
+
+          total:
+            calculatedTotal,
+
+          /*
+          ------------------------------------------
+          STATUS
+          ------------------------------------------
+          */
+
+          status:
+            "pending",
+
+          /*
+          ------------------------------------------
+          PAYMENT
+          ------------------------------------------
+          */
+
+          paymentMethod:
+            cleanString(
+              paymentMethod
+            ) || "cod",
+
+          paymentStatus:
+            "pending",
+
+          /*
+          ------------------------------------------
+          SOURCE
+          ------------------------------------------
+          */
+
+          source:
+            cleanString(
+              source
+            ) || "website",
+
+          orderSource:
+            cleanString(
+              orderSource
+            ) || "website",
+
+          landingPageId:
+            cleanString(
+              landingPageId
+            ),
+        });
+
+      /*
+      ==============================================
+      SAVE ORDER
+      ==============================================
+      */
+
+      const savedOrder =
+        await newOrder.save();
+
       console.log(
-        "PRODUCT STOCK UPDATED"
-      );
-    } catch (stockError) {
-      console.error(
-        "STOCK UPDATE ERROR:",
-        stockError
+        "ORDER SAVED:",
+        savedOrder._id.toString()
       );
 
       /*
-      ============================================
-      IMPORTANT:
-      ORDER EXISTS BUT STOCK UPDATE FAILED
-      ============================================
+      ==============================================
+      IMPORTANT
+      ==============================================
+
+      STOCK IS NOT DEDUCTED HERE.
+
+      ==============================================
       */
 
-      await Order.findByIdAndUpdate(
-        savedOrder._id,
-        {
-          $set: {
-            note:
-              finalNote
-                ? `${finalNote} | Stock update warning: ${stockError.message}`
-                : `Stock update warning: ${stockError.message}`,
-          },
-        }
+      return res.status(201).json({
+        success: true,
+
+        message:
+          "Order created successfully.",
+
+        order:
+          savedOrder,
+      });
+    } catch (error) {
+      console.error(
+        "CREATE ORDER ERROR:",
+        error
       );
-    }
 
-    /*
-    ================================================
-    RESPONSE
-    ================================================
-    */
+      if (
+        error.name ===
+          "Error" &&
+        error.message
+      ) {
+        return res.status(400).json({
+          success: false,
+          message:
+            error.message,
+        });
+      }
 
-    return res.status(201).json({
-      success: true,
+      if (
+        error.name ===
+        "ValidationError"
+      ) {
+        const errors =
+          Object.values(
+            error.errors
+          ).map(
+            (err) => ({
+              field:
+                err.path,
 
-      message:
-        "Order created successfully.",
+              message:
+                err.message,
+            })
+          );
 
-      order:
-        savedOrder,
-    });
-  } catch (error) {
-    console.error(
-      "CREATE ORDER ERROR:",
-      error
-    );
+        return res.status(400).json({
+          success: false,
 
-    /*
-    ================================================
-    CUSTOM ERROR
-    ================================================
-    */
+          message:
+            "Order validation failed.",
 
-    if (
-      error.name === "Error" &&
-      error.message
-    ) {
-      return res.status(400).json({
+          errors,
+        });
+      }
+
+      if (
+        error instanceof
+        mongoose.Error.CastError
+      ) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Invalid order ID.",
+        });
+      }
+
+      return res.status(500).json({
         success: false,
         message:
+          "Failed to create order.",
+        error:
           error.message,
       });
     }
-
-    /*
-    ================================================
-    MONGOOSE VALIDATION ERROR
-    ================================================
-    */
-
-    if (
-      error.name ===
-      "ValidationError"
-    ) {
-      const errors =
-        Object.values(
-          error.errors
-        ).map((err) => ({
-          field:
-            err.path,
-
-          message:
-            err.message,
-        }));
-
-      return res.status(400).json({
-        success: false,
-
-        message:
-          "Order validation failed.",
-
-        errors,
-      });
-    }
-
-    /*
-    ================================================
-    INVALID OBJECT ID
-    ================================================
-    */
-
-    if (
-      error instanceof
-        mongoose.Error.CastError
-    ) {
-      return res.status(400).json({
-        success: false,
-        message:
-          "Invalid order ID.",
-      });
-    }
-
-    /*
-    ================================================
-    DEFAULT ERROR
-    ================================================
-    */
-
-    return res.status(500).json({
-      success: false,
-
-      message:
-        "Failed to create order.",
-
-      error:
-        error.message,
-    });
   }
-});
+);
 
 /*
 ==================================================
@@ -1110,39 +1442,40 @@ GET /api/orders
 ==================================================
 */
 
-router.get("/", async (req, res) => {
-  try {
-    const orders =
-      await Order.find()
-        .populate(
-          "product",
-          "productId name brand category image price variants"
-        )
-        .sort({
-          createdAt: -1,
-        });
+router.get(
+  "/",
+  async (req, res) => {
+    try {
+      const orders =
+        await Order.find()
+          .populate(
+            "product",
+            "productId name brand category image price variants"
+          )
+          .sort({
+            createdAt: -1,
+          });
 
-    return res.json({
-      success: true,
-      orders,
-    });
-  } catch (error) {
-    console.error(
-      "GET ORDERS ERROR:",
-      error
-    );
+      return res.json({
+        success: true,
+        orders,
+      });
+    } catch (error) {
+      console.error(
+        "GET ORDERS ERROR:",
+        error
+      );
 
-    return res.status(500).json({
-      success: false,
-
-      message:
-        "Failed to fetch orders.",
-
-      error:
-        error.message,
-    });
+      return res.status(500).json({
+        success: false,
+        message:
+          "Failed to fetch orders.",
+        error:
+          error.message,
+      });
+    }
   }
-});
+);
 
 /*
 ==================================================
@@ -1163,17 +1496,10 @@ router.post(
       if (!phone) {
         return res.status(400).json({
           success: false,
-
           message:
             "Phone number is required.",
         });
       }
-
-      /*
-      ============================================
-      PHONE VALIDATION
-      ============================================
-      */
 
       if (
         !/^01\d{9}$/.test(
@@ -1182,7 +1508,6 @@ router.post(
       ) {
         return res.status(400).json({
           success: false,
-
           message:
             "Invalid Bangladesh phone number.",
         });
@@ -1195,7 +1520,6 @@ router.post(
 
       return res.json({
         success: true,
-
         data:
           result,
       });
@@ -1207,10 +1531,8 @@ router.post(
 
       return res.status(500).json({
         success: false,
-
         message:
           "Fraud check failed.",
-
         error:
           error.message,
       });
@@ -1234,7 +1556,6 @@ router.get(
 
       return res.json({
         success: true,
-
         data:
           balance,
       });
@@ -1246,10 +1567,8 @@ router.get(
 
       return res.status(500).json({
         success: false,
-
         message:
           "Failed to get courier balance.",
-
         error:
           error.message,
       });
@@ -1294,26 +1613,13 @@ router.post(
         invoice,
       } = req.body;
 
-      /*
-      ============================================
-      VALIDATION
-      ============================================
-      */
-
       if (!consignment_id) {
         return res.status(400).json({
           success: false,
-
           message:
             "Consignment ID is required.",
         });
       }
-
-      /*
-      ============================================
-      FIND ORDER
-      ============================================
-      */
 
       const searchConditions = [
         {
@@ -1331,12 +1637,6 @@ router.post(
         },
       ];
 
-      /*
-      ============================================
-      INVOICE AS OBJECT ID
-      ============================================
-      */
-
       if (
         invoice &&
         mongoose.Types.ObjectId.isValid(
@@ -1344,7 +1644,8 @@ router.post(
         )
       ) {
         searchConditions.push({
-          _id: invoice,
+          _id:
+            invoice,
         });
       }
 
@@ -1357,26 +1658,13 @@ router.post(
       if (!order) {
         return res.status(404).json({
           success: false,
-
           message:
             "Order not found.",
         });
       }
 
-      /*
-      ============================================
-      UPDATE COURIER STATUS
-      ============================================
-      */
-
       order.courierStatus =
         status || "";
-
-      /*
-      ============================================
-      NORMALIZE STATUS
-      ============================================
-      */
 
       const normalizedStatus =
         String(
@@ -1384,12 +1672,6 @@ router.post(
         )
           .trim()
           .toLowerCase();
-
-      /*
-      ============================================
-      DELIVERED
-      ============================================
-      */
 
       if (
         normalizedStatus ===
@@ -1401,12 +1683,6 @@ router.post(
           "delivered";
       }
 
-      /*
-      ============================================
-      RETURNED
-      ============================================
-      */
-
       if (
         normalizedStatus ===
           "cancelled" ||
@@ -1416,12 +1692,6 @@ router.post(
         order.status =
           "returned";
       }
-
-      /*
-      ============================================
-      COURIER HISTORY
-      ============================================
-      */
 
       if (
         !Array.isArray(
@@ -1443,17 +1713,10 @@ router.post(
           new Date(),
       });
 
-      /*
-      ============================================
-      SAVE
-      ============================================
-      */
-
       await order.save();
 
       return res.json({
         success: true,
-
         message:
           "Webhook processed.",
       });
@@ -1465,10 +1728,8 @@ router.post(
 
       return res.status(500).json({
         success: false,
-
         message:
           "Webhook processing failed.",
-
         error:
           error.message,
       });
@@ -1480,6 +1741,11 @@ router.post(
 ==================================================
 CONFIRM ORDER
 POST /api/orders/:id/confirm
+==================================================
+
+IMPORTANT:
+
+THIS is where stock is deducted.
 ==================================================
 */
 
@@ -1495,16 +1761,15 @@ router.post(
       if (!order) {
         return res.status(404).json({
           success: false,
-
           message:
             "Order not found.",
         });
       }
 
       /*
-      ============================================
+      ==============================================
       ALREADY CONFIRMED
-      ============================================
+      ==============================================
       */
 
       if (
@@ -1513,18 +1778,16 @@ router.post(
       ) {
         return res.json({
           success: true,
-
           message:
             "Order is already confirmed.",
-
           order,
         });
       }
 
       /*
-      ============================================
-      PREVENT FINAL STATES
-      ============================================
+      ==============================================
+      FINAL STATES
+      ==============================================
       */
 
       if (
@@ -1539,16 +1802,220 @@ router.post(
       ) {
         return res.status(400).json({
           success: false,
-
           message:
             `Order cannot be confirmed because its current status is "${order.status}".`,
         });
       }
 
       /*
-      ============================================
-      CONFIRM
-      ============================================
+      ==============================================
+      ORDER ITEMS
+      ==============================================
+      */
+
+      const orderItems =
+        Array.isArray(
+          order.items
+        ) &&
+        order.items.length > 0
+          ? order.items
+          : [
+              {
+                productId:
+                  order.productId,
+
+                variantId:
+                  order.variantId,
+
+                selectedColor:
+                  order.selectedColor,
+
+                selectedColorCode:
+                  order.selectedColorCode,
+
+                selectedSize:
+                  order.selectedSize,
+
+                quantity:
+                  order.quantity ||
+                  1,
+              },
+            ];
+
+      /*
+      ==============================================
+      VALIDATE STOCK AGAIN
+      ==============================================
+
+      Stock could have changed
+      after order creation.
+
+      So check fresh database stock.
+      ==============================================
+      */
+
+      for (
+        let index = 0;
+        index <
+        orderItems.length;
+        index++
+      ) {
+        const item =
+          orderItems[index];
+
+        const product =
+          await findProduct(
+            item.productId
+          );
+
+        if (!product) {
+          return res.status(400).json({
+            success: false,
+            message:
+              `Product ${item.productId} no longer exists.`,
+          });
+        }
+
+        const variant =
+          findVariant(
+            product,
+            item.variantId,
+            item.selectedColor
+          );
+
+        /*
+        --------------------------------------------
+        VARIANT REQUIRED
+        --------------------------------------------
+        */
+
+        if (
+          Array.isArray(
+            product.variants
+          ) &&
+          product.variants.length >
+            0 &&
+          !variant
+        ) {
+          return res.status(400).json({
+            success: false,
+            message:
+              `Variant for "${product.name}" is no longer available.`,
+          });
+        }
+
+        /*
+        --------------------------------------------
+        SIZE REQUIRED
+        --------------------------------------------
+        */
+
+        if (
+          variant &&
+          Array.isArray(
+            variant.sizes
+          ) &&
+          variant.sizes.length >
+            0
+        ) {
+          if (
+            !item.selectedSize
+          ) {
+            return res.status(400).json({
+              success: false,
+              message:
+                `Size is required for "${product.name}".`,
+            });
+          }
+
+          const sizeObject =
+            variant.sizes.find(
+              (size) =>
+                cleanString(
+                  size.size
+                ).toLowerCase() ===
+                cleanString(
+                  item.selectedSize
+                ).toLowerCase()
+            );
+
+          if (!sizeObject) {
+            return res.status(400).json({
+              success: false,
+              message:
+                `Size "${item.selectedSize}" is no longer available for "${product.name}".`,
+            });
+          }
+        }
+
+        const availableStock =
+          getItemAvailableStock(
+            product,
+            variant,
+            item.selectedSize
+          );
+
+        const requestedQuantity =
+          Number(
+            item.quantity
+          );
+
+        if (
+          requestedQuantity >
+          availableStock
+        ) {
+          return res.status(400).json({
+            success: false,
+            message:
+              `Insufficient stock for "${product.name}". Available: ${availableStock}, requested: ${requestedQuantity}.`,
+            productId:
+              product.productId,
+
+            variantId:
+              item.variantId ||
+              "",
+
+            size:
+              item.selectedSize ||
+              "",
+
+            availableStock,
+            requestedQuantity,
+          });
+        }
+      }
+
+      /*
+      ==============================================
+      DEDUCT STOCK
+      ==============================================
+      */
+
+      try {
+        for (
+          const item of orderItems
+        ) {
+          await decreaseProductStock(
+            item
+          );
+        }
+      } catch (stockError) {
+        console.error(
+          "CONFIRM STOCK ERROR:",
+          stockError
+        );
+
+        return res.status(400).json({
+          success: false,
+          message:
+            `Order could not be confirmed. ${stockError.message}`,
+        });
+      }
+
+      /*
+      ==============================================
+      CONFIRM ORDER
+      ==============================================
       */
 
       order.status =
@@ -1565,7 +2032,7 @@ router.post(
         success: true,
 
         message:
-          "Order confirmed successfully.",
+          "Order confirmed successfully. Stock deducted.",
 
         order,
       });
@@ -1577,10 +2044,8 @@ router.post(
 
       return res.status(500).json({
         success: false,
-
         message:
           "Failed to confirm order.",
-
         error:
           error.message,
       });
@@ -1607,17 +2072,27 @@ router.post(
       if (!order) {
         return res.status(404).json({
           success: false,
-
           message:
             "Order not found.",
         });
       }
 
       /*
-      ============================================
-      PREVENT DUPLICATE PARCEL
-      ============================================
+      ----------------------------------------------
+      CONFIRM REQUIRED
+      ----------------------------------------------
       */
+
+      if (
+        order.status !==
+        "confirmed"
+      ) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Order must be confirmed before creating a courier parcel.",
+        });
+      }
 
       if (
         order.consignmentId &&
@@ -1625,30 +2100,16 @@ router.post(
       ) {
         return res.status(400).json({
           success: false,
-
           message:
             "Parcel already exists for this order.",
-
           order,
         });
       }
-
-      /*
-      ============================================
-      CREATE PARCEL
-      ============================================
-      */
 
       const parcel =
         await createParcel(
           order
         );
-
-      /*
-      ============================================
-      UPDATE ORDER
-      ============================================
-      */
 
       order.courier =
         "steadfast";
@@ -1675,12 +2136,6 @@ router.post(
       order.parcelError =
         "";
 
-      /*
-      ============================================
-      SAVE
-      ============================================
-      */
-
       await order.save();
 
       console.log(
@@ -1691,12 +2146,9 @@ router.post(
 
       return res.json({
         success: true,
-
         message:
           "Parcel created successfully.",
-
         order,
-
         parcel,
       });
     } catch (error) {
@@ -1704,12 +2156,6 @@ router.post(
         "CREATE PARCEL ERROR:",
         error
       );
-
-      /*
-      ============================================
-      SAVE PARCEL ERROR
-      ============================================
-      */
 
       try {
         await Order.findByIdAndUpdate(
@@ -1728,10 +2174,8 @@ router.post(
 
       return res.status(500).json({
         success: false,
-
         message:
           "Failed to create parcel.",
-
         error:
           error.message,
       });
@@ -1761,7 +2205,6 @@ router.get(
       if (!order) {
         return res.status(404).json({
           success: false,
-
           message:
             "Order not found.",
         });
@@ -1769,7 +2212,6 @@ router.get(
 
       return res.json({
         success: true,
-
         order,
       });
     } catch (error) {
@@ -1780,10 +2222,8 @@ router.get(
 
       return res.status(500).json({
         success: false,
-
         message:
           "Failed to fetch order.",
-
         error:
           error.message,
       });
@@ -1802,12 +2242,6 @@ router.put(
   "/:id",
   async (req, res) => {
     try {
-      /*
-      ============================================
-      ALLOWED FIELDS ONLY
-      ============================================
-      */
-
       const allowedFields = [
         "name",
         "phone",
@@ -1855,21 +2289,15 @@ router.put(
         }
       }
 
-      /*
-      ============================================
-      UPDATE
-      ============================================
-      */
-
       const updatedOrder =
         await Order.findByIdAndUpdate(
           req.params.id,
           {
-            $set: updateData,
+            $set:
+              updateData,
           },
           {
             new: true,
-
             runValidators:
               true,
           }
@@ -1878,7 +2306,6 @@ router.put(
       if (!updatedOrder) {
         return res.status(404).json({
           success: false,
-
           message:
             "Order not found.",
         });
@@ -1886,10 +2313,8 @@ router.put(
 
       return res.json({
         success: true,
-
         message:
           "Order updated successfully.",
-
         order:
           updatedOrder,
       });
@@ -1899,12 +2324,6 @@ router.put(
         error
       );
 
-      /*
-      ============================================
-      MONGOOSE VALIDATION ERROR
-      ============================================
-      */
-
       if (
         error.name ===
         "ValidationError"
@@ -1912,30 +2331,28 @@ router.put(
         const errors =
           Object.values(
             error.errors
-          ).map((err) => ({
-            field:
-              err.path,
+          ).map(
+            (err) => ({
+              field:
+                err.path,
 
-            message:
-              err.message,
-          }));
+              message:
+                err.message,
+            })
+          );
 
         return res.status(400).json({
           success: false,
-
           message:
             "Order validation failed.",
-
           errors,
         });
       }
 
       return res.status(500).json({
         success: false,
-
         message:
           "Failed to update order.",
-
         error:
           error.message,
       });
@@ -1962,7 +2379,6 @@ router.delete(
       if (!deletedOrder) {
         return res.status(404).json({
           success: false,
-
           message:
             "Order not found.",
         });
@@ -1975,7 +2391,6 @@ router.delete(
 
       return res.json({
         success: true,
-
         message:
           "Order deleted successfully.",
       });
@@ -1987,10 +2402,8 @@ router.delete(
 
       return res.status(500).json({
         success: false,
-
         message:
           "Failed to delete order.",
-
         error:
           error.message,
       });
