@@ -1,0 +1,6 @@
+{
+  "DEPLOYPATH" : "/home/spriengg/public_html/",
+  "task" : [
+    "*"
+  ]
+}
