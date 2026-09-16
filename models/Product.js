@@ -11,7 +11,7 @@ const sizeSchema = new mongoose.Schema(
     size: {
       type: String,
       trim: true,
-      default: "",
+      required: true,
     },
 
     stock: {
@@ -86,6 +86,74 @@ const variantSchema = new mongoose.Schema(
 
 /*
 ==================================================
+DETAILS SCHEMA
+==================================================
+*/
+
+const detailsSchema = new mongoose.Schema(
+  {
+    shortDescription: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+
+    overview: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+
+    features: {
+      type: [String],
+      default: [],
+    },
+
+    specifications: {
+      type: mongoose.Schema.Types.Mixed,
+      default: {},
+    },
+
+    howToUse: {
+      type: [String],
+      default: [],
+    },
+
+    careInstructions: {
+      type: [String],
+      default: [],
+    },
+
+    whatsIncluded: {
+      type: [String],
+      default: [],
+    },
+
+    deliveryInfo: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+
+    returnPolicy: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+
+    warranty: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+  },
+  {
+    _id: false,
+  }
+);
+
+/*
+==================================================
 PRODUCT SCHEMA
 ==================================================
 */
@@ -97,11 +165,13 @@ const productSchema = new mongoose.Schema(
     MAIN PRODUCT ID
     ----------------------------------------------
     */
+
     productId: {
       type: Number,
       required: true,
       unique: true,
       index: true,
+      min: 1,
     },
 
     /*
@@ -150,6 +220,7 @@ const productSchema = new mongoose.Schema(
       type: Number,
       default: 0,
       min: 0,
+      max: 100,
     },
 
     /*
@@ -208,6 +279,7 @@ const productSchema = new mongoose.Schema(
     image: {
       type: String,
       default: "",
+      trim: true,
     },
 
     images: {
@@ -224,6 +296,7 @@ const productSchema = new mongoose.Schema(
     description: {
       type: String,
       default: "",
+      trim: true,
     },
 
     tags: {
@@ -249,55 +322,8 @@ const productSchema = new mongoose.Schema(
     */
 
     details: {
-      shortDescription: {
-        type: String,
-        default: "",
-      },
-
-      overview: {
-        type: String,
-        default: "",
-      },
-
-      features: {
-        type: [String],
-        default: [],
-      },
-
-      specifications: {
-        type: mongoose.Schema.Types.Mixed,
-        default: {},
-      },
-
-      howToUse: {
-        type: [String],
-        default: [],
-      },
-
-      careInstructions: {
-        type: [String],
-        default: [],
-      },
-
-      whatsIncluded: {
-        type: [String],
-        default: [],
-      },
-
-      deliveryInfo: {
-        type: String,
-        default: "",
-      },
-
-      returnPolicy: {
-        type: String,
-        default: "",
-      },
-
-      warranty: {
-        type: String,
-        default: "",
-      },
+      type: detailsSchema,
+      default: () => ({}),
     },
 
     /*
@@ -339,7 +365,26 @@ const productSchema = new mongoose.Schema(
 
   {
     timestamps: true,
+    minimize: false,
   }
 );
+
+/*
+==================================================
+INDEXES
+==================================================
+*/
+
+productSchema.index({
+  name: "text",
+  brand: "text",
+  category: "text",
+});
+
+/*
+==================================================
+EXPORT
+==================================================
+*/
 
 module.exports = mongoose.model("Product", productSchema);
