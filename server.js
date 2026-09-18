@@ -15,7 +15,11 @@ CONFIG
 const PORT = Number(process.env.PORT) || 30114;
 
 const allowedOrigins = [
-  "https://sprienge-admin-panel.vercel.app",
+  "http://localhost:5173",
+  "http://localhost:5174",
+  "http://127.0.0.1:5173",
+  "http://127.0.0.1:5174",
+  "https://spriengge-admin-panel.vercel.app",
   "https://spriengge.shop",
   "https://www.spriengge.shop",
 ];
