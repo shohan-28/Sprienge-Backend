@@ -43,20 +43,20 @@ CORS
 
 const corsOptions = {
   origin: function (origin, callback) {
-    // Allow requests without Origin
-    // Example: Postman, server-to-server
+    // Requests without Origin
+    // Example: Postman / server-to-server
     if (!origin) {
       return callback(null, true);
     }
 
     if (allowedOrigins.includes(origin)) {
-      console.log("CORS allowed:", origin);
+      console.log("CORS ALLOWED:", origin);
       return callback(null, true);
     }
 
-    console.log("CORS blocked:", origin);
+    console.log("CORS BLOCKED:", origin);
 
-    // Do not crash the server
+    // Don't crash backend
     return callback(null, false);
   },
 
@@ -92,11 +92,59 @@ app.use(cors(corsOptions));
 
 /*
 ==================================================
-PREFLIGHT
+EXPLICIT PREFLIGHT HANDLER
 ==================================================
 */
 
-app.options(/.*/, cors(corsOptions));
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+
+  console.log(
+    `REQUEST: ${req.method} ${req.originalUrl}`,
+    origin ? `Origin: ${origin}` : ""
+  );
+
+  if (origin && allowedOrigins.includes(origin)) {
+    res.setHeader("Access-Control-Allow-Origin", origin);
+
+    res.setHeader(
+      "Access-Control-Allow-Credentials",
+      "true"
+    );
+
+    res.setHeader(
+      "Access-Control-Allow-Methods",
+      "GET,POST,PUT,PATCH,DELETE,OPTIONS"
+    );
+
+    res.setHeader(
+      "Access-Control-Allow-Headers",
+      "Content-Type, Authorization, Accept, Origin, X-Requested-With"
+    );
+
+    res.setHeader(
+      "Access-Control-Max-Age",
+      "86400"
+    );
+  }
+
+  /*
+  ================================================
+  HANDLE PREFLIGHT REQUEST
+  ================================================
+  */
+
+  if (req.method === "OPTIONS") {
+    console.log(
+      "PREFLIGHT REQUEST HANDLED:",
+      req.originalUrl
+    );
+
+    return res.status(204).end();
+  }
+
+  next();
+});
 
 /*
 ==================================================
