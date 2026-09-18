@@ -1579,7 +1579,7 @@ Stock is deducted ONLY here.
 ==================================================
 */
 
-router.patch(
+router.post(
   "/:id/confirm",
   async (req, res) => {
     try {
