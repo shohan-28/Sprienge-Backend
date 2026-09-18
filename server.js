@@ -19,7 +19,11 @@ const allowedOrigins = [
   "http://localhost:5174",
   "http://127.0.0.1:5173",
   "http://127.0.0.1:5174",
-  "https://spriengge-admin-panel.vercel.app",
+
+  // Admin Panel
+  "https://sprienge-admin-panel.vercel.app",
+
+  // Main Website
   "https://spriengge.shop",
   "https://www.spriengge.shop",
 ];
@@ -37,31 +41,62 @@ CORS
 ==================================================
 */
 
-app.use(
-  cors({
-    origin: function (origin, callback) {
-      // Allow requests without origin
-      // e.g. Postman/server-to-server
-      if (!origin) {
-        return callback(null, true);
-      }
+const corsOptions = {
+  origin: function (origin, callback) {
+    // Allow requests without Origin
+    // Example: Postman, server-to-server
+    if (!origin) {
+      return callback(null, true);
+    }
 
-      if (allowedOrigins.includes(origin)) {
-        return callback(null, true);
-      }
+    if (allowedOrigins.includes(origin)) {
+      console.log("CORS allowed:", origin);
+      return callback(null, true);
+    }
 
-      console.log("Blocked CORS origin:", origin);
+    console.log("CORS blocked:", origin);
 
-      return callback(null, false);
-    },
-    credentials: true,
-    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allowedHeaders: [
-      "Content-Type",
-      "Authorization",
-    ],
-  })
-);
+    // Do not crash the server
+    return callback(null, false);
+  },
+
+  credentials: true,
+
+  methods: [
+    "GET",
+    "POST",
+    "PUT",
+    "PATCH",
+    "DELETE",
+    "OPTIONS",
+  ],
+
+  allowedHeaders: [
+    "Content-Type",
+    "Authorization",
+    "Accept",
+    "Origin",
+    "X-Requested-With",
+  ],
+
+  optionsSuccessStatus: 204,
+};
+
+/*
+==================================================
+CORS MIDDLEWARE
+==================================================
+*/
+
+app.use(cors(corsOptions));
+
+/*
+==================================================
+PREFLIGHT
+==================================================
+*/
+
+app.options(/.*/, cors(corsOptions));
 
 /*
 ==================================================
@@ -147,7 +182,7 @@ app.use((err, req, res, next) => {
 
 /*
 ==================================================
-MONGODB
+MONGODB + SERVER
 ==================================================
 */
 
@@ -164,12 +199,6 @@ const startServer = async () => {
     console.log("====================================");
     console.log("MongoDB Connected Successfully");
     console.log("====================================");
-
-    /*
-    ==================================================
-    SERVER
-    ==================================================
-    */
 
     app.listen(PORT, "0.0.0.0", () => {
       console.log("====================================");
