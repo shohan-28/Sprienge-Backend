@@ -1,3 +1,4 @@
+
 const express = require("express");
 const mongoose = require("mongoose");
 const cors = require("cors");
@@ -15,11 +16,14 @@ CONFIG
 const PORT = Number(process.env.PORT) || 30114;
 
 const allowedOrigins = [
+  // Local Development
   "http://localhost:5173",
   "http://localhost:5174",
   "http://127.0.0.1:5173",
   "http://127.0.0.1:5174",
-  "https://bdmart-mu.vercel.app/",
+
+  // Old / Other Frontend
+  "https://bdmart-mu.vercel.app",
 
   // Admin Panel
   "https://sprienge-admin-panel.vercel.app",
@@ -33,7 +37,10 @@ console.log("====================================");
 console.log("Starting Spriengge Backend...");
 console.log("PORT:", PORT);
 console.log("NODE_ENV:", process.env.NODE_ENV || "not-set");
-console.log("MONGO_URI:", process.env.MONGO_URI ? "Loaded" : "Missing");
+console.log(
+  "MONGO_URI:",
+  process.env.MONGO_URI ? "Loaded" : "Missing"
+);
 console.log("====================================");
 
 /*
@@ -44,7 +51,7 @@ CORS
 
 const corsOptions = {
   origin: function (origin, callback) {
-    // Requests without Origin
+    // Allow requests without Origin
     // Example: Postman / server-to-server
     if (!origin) {
       return callback(null, true);
@@ -57,7 +64,7 @@ const corsOptions = {
 
     console.log("CORS BLOCKED:", origin);
 
-    // Don't crash backend
+    // Don't crash backend for unknown origins
     return callback(null, false);
   },
 
@@ -81,6 +88,8 @@ const corsOptions = {
   ],
 
   optionsSuccessStatus: 204,
+
+  maxAge: 86400,
 };
 
 /*
@@ -93,56 +102,25 @@ app.use(cors(corsOptions));
 
 /*
 ==================================================
-EXPLICIT PREFLIGHT HANDLER
+PREFLIGHT
+==================================================
+*/
+
+app.options("*", cors(corsOptions));
+
+/*
+==================================================
+REQUEST LOGGER
 ==================================================
 */
 
 app.use((req, res, next) => {
-  const origin = req.headers.origin;
-
   console.log(
-    `REQUEST: ${req.method} ${req.originalUrl}`,
-    origin ? `Origin: ${origin}` : ""
+    `[${new Date().toISOString()}] ${req.method} ${req.originalUrl}`,
+    req.headers.origin
+      ? `Origin: ${req.headers.origin}`
+      : ""
   );
-
-  if (origin && allowedOrigins.includes(origin)) {
-    res.setHeader("Access-Control-Allow-Origin", origin);
-
-    res.setHeader(
-      "Access-Control-Allow-Credentials",
-      "true"
-    );
-
-    res.setHeader(
-      "Access-Control-Allow-Methods",
-      "GET,POST,PUT,PATCH,DELETE,OPTIONS"
-    );
-
-    res.setHeader(
-      "Access-Control-Allow-Headers",
-      "Content-Type, Authorization, Accept, Origin, X-Requested-With"
-    );
-
-    res.setHeader(
-      "Access-Control-Max-Age",
-      "86400"
-    );
-  }
-
-  /*
-  ================================================
-  HANDLE PREFLIGHT REQUEST
-  ================================================
-  */
-
-  if (req.method === "OPTIONS") {
-    console.log(
-      "PREFLIGHT REQUEST HANDLED:",
-      req.originalUrl
-    );
-
-    return res.status(204).end();
-  }
 
   next();
 });
@@ -220,12 +198,18 @@ GLOBAL ERROR
 */
 
 app.use((err, req, res, next) => {
-  console.error("GLOBAL ERROR:", err);
+  console.error("====================================");
+  console.error("GLOBAL ERROR:");
+  console.error(err);
+  console.error("====================================");
 
   res.status(500).json({
     success: false,
     message: "Internal server error",
-    error: err.message,
+    error:
+      process.env.NODE_ENV === "production"
+        ? undefined
+        : err.message,
   });
 });
 
@@ -266,3 +250,4 @@ const startServer = async () => {
 };
 
 startServer();
+
