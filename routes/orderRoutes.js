@@ -1,3 +1,4 @@
+
 const express = require("express");
 const mongoose = require("mongoose");
 
@@ -19,10 +20,7 @@ HELPERS
 */
 
 const cleanString = (value) => {
-  if (
-    value === undefined ||
-    value === null
-  ) {
+  if (value === undefined || value === null) {
     return "";
   }
 
@@ -32,9 +30,7 @@ const cleanString = (value) => {
 const normalizeProductId = (value) => {
   const id = Number(value);
 
-  return Number.isInteger(id) && id > 0
-    ? id
-    : null;
+  return Number.isInteger(id) && id > 0 ? id : null;
 };
 
 const normalizeQuantity = (value) => {
@@ -51,13 +47,39 @@ const normalizeVariantId = (value) => {
 
 /*
 ==================================================
+DEFAULT SELECTION CHECK
+==================================================
+
+Frontend থেকে পুরোনো payload এলে:
+
+selectedColor: "Default"
+
+বা
+
+selectedColor: "Default Color"
+
+এগুলোকে কোনো actual color/variant হিসেবে ধরা হবে না।
+==================================================
+*/
+
+const isDefaultSelection = (value) => {
+  const normalized = cleanString(value).toLowerCase();
+
+  return (
+    normalized === "" ||
+    normalized === "default" ||
+    normalized === "default color"
+  );
+};
+
+/*
+==================================================
 FIND PRODUCT
 ==================================================
 */
 
 const findProduct = async (productId) => {
-  const normalizedId =
-    normalizeProductId(productId);
+  const normalizedId = normalizeProductId(productId);
 
   if (!normalizedId) {
     return null;
@@ -77,6 +99,8 @@ Priority:
 
 1. variantId
 2. selectedColor
+
+Default / empty selection is ignored.
 ==================================================
 */
 
@@ -96,44 +120,50 @@ const findVariant = (
   const normalizedVariantId =
     normalizeVariantId(variantId);
 
-  const normalizedColor =
-    cleanString(selectedColor).toLowerCase();
+  const rawColor = cleanString(selectedColor);
+
+  const normalizedColor = isDefaultSelection(rawColor)
+    ? ""
+    : rawColor.toLowerCase();
 
   /*
-  ----------------------------------------------
+  ================================================
   FIRST: VARIANT ID
-  ----------------------------------------------
+  ================================================
   */
 
   if (normalizedVariantId) {
-    const variantById =
-      product.variants.find(
-        (variant) =>
-          cleanString(
-            variant?.variantId
-          ) === normalizedVariantId
-      );
+    const variantById = product.variants.find(
+      (variant) =>
+        cleanString(variant?.variantId) ===
+        normalizedVariantId
+    );
 
     if (variantById) {
       return variantById;
     }
+
+    /*
+    যদি variantId পাঠানো হয় কিন্তু পাওয়া না যায়,
+    পরে color দিয়ে অন্য variant select করা হবে না।
+    কারণ এতে ভুল variant select হওয়ার সম্ভাবনা থাকে।
+    */
+
+    return null;
   }
 
   /*
-  ----------------------------------------------
+  ================================================
   SECOND: COLOR
-  ----------------------------------------------
+  ================================================
   */
 
   if (normalizedColor) {
-    const variantByColor =
-      product.variants.find(
-        (variant) =>
-          cleanString(
-            variant?.color
-          ).toLowerCase() ===
-          normalizedColor
-      );
+    const variantByColor = product.variants.find(
+      (variant) =>
+        cleanString(variant?.color).toLowerCase() ===
+        normalizedColor
+    );
 
     if (variantByColor) {
       return variantByColor;
@@ -141,6 +171,171 @@ const findVariant = (
   }
 
   return null;
+};
+
+/*
+==================================================
+GET AVAILABLE VARIANT LIST
+==================================================
+*/
+
+const getAvailableVariants = (product) => {
+  if (
+    !product ||
+    !Array.isArray(product.variants)
+  ) {
+    return [];
+  }
+
+  return product.variants.filter((variant) => {
+    /*
+    ----------------------------------------------
+    Variant with sizes
+    ----------------------------------------------
+    */
+
+    if (
+      Array.isArray(variant?.sizes) &&
+      variant.sizes.length > 0
+    ) {
+      return variant.sizes.some(
+        (size) =>
+          Number(size?.stock || 0) > 0
+      );
+    }
+
+    /*
+    ----------------------------------------------
+    Variant without sizes
+    ----------------------------------------------
+    */
+
+    return Number(variant?.stock || 0) > 0;
+  });
+};
+
+/*
+==================================================
+RESOLVE VARIANT
+==================================================
+
+Rules:
+
+1. variantId থাকলে সেটা দিয়ে find
+2. না থাকলে color দিয়ে find
+3. দুটোই না থাকলে:
+   - product-এর কোনো variant না থাকলে => null
+   - exactly one available variant থাকলে => auto select
+   - multiple available variant থাকলে => error
+
+allowAutoSelect:
+create order-এর সময় true
+confirm-এর সময় সাধারণত false
+==================================================
+*/
+
+const resolveVariant = (
+  product,
+  {
+    variantId = "",
+    selectedColor = "",
+    allowAutoSelect = true,
+  } = {}
+) => {
+  if (
+    !product ||
+    !Array.isArray(product.variants) ||
+    product.variants.length === 0
+  ) {
+    return null;
+  }
+
+  const normalizedVariantId =
+    normalizeVariantId(variantId);
+
+  const normalizedColor =
+    isDefaultSelection(selectedColor)
+      ? ""
+      : cleanString(selectedColor);
+
+  /*
+  ================================================
+  Explicit variantId
+  ================================================
+  */
+
+  if (normalizedVariantId) {
+    const variant = findVariant(
+      product,
+      normalizedVariantId,
+      ""
+    );
+
+    if (!variant) {
+      throw new Error(
+        `Selected variant was not found for "${product.name}".`
+      );
+    }
+
+    return variant;
+  }
+
+  /*
+  ================================================
+  Explicit color
+  ================================================
+  */
+
+  if (normalizedColor) {
+    const variant = findVariant(
+      product,
+      "",
+      normalizedColor
+    );
+
+    if (!variant) {
+      throw new Error(
+        `Selected variant was not found for "${product.name}".`
+      );
+    }
+
+    return variant;
+  }
+
+  /*
+  ================================================
+  NO VARIANT SELECTION
+  ================================================
+  */
+
+  if (!allowAutoSelect) {
+    throw new Error(
+      `Variant information is missing for "${product.name}".`
+    );
+  }
+
+  /*
+  ================================================
+  AUTO SELECT
+  ================================================
+  */
+
+  const availableVariants =
+    getAvailableVariants(product);
+
+  if (availableVariants.length === 1) {
+    return availableVariants[0];
+  }
+
+  if (availableVariants.length === 0) {
+    throw new Error(
+      `"${product.name}" is currently out of stock.`
+    );
+  }
+
+  throw new Error(
+    `Please select a variant for "${product.name}".`
+  );
 };
 
 /*
@@ -155,21 +350,19 @@ const getItemAvailableStock = (
   selectedSize
 ) => {
   /*
-  ==============================================
+  ================================================
   PRODUCT WITHOUT VARIANT
-  ==============================================
+  ================================================
   */
 
   if (!variant) {
-    return Number(
-      product?.stock || 0
-    );
+    return Number(product?.stock || 0);
   }
 
   /*
-  ==============================================
+  ================================================
   VARIANT WITH SIZES
-  ==============================================
+  ================================================
   */
 
   if (
@@ -183,63 +376,35 @@ const getItemAvailableStock = (
       return 0;
     }
 
-    const sizeObject =
-      variant.sizes.find(
-        (size) =>
-          cleanString(
-            size?.size
-          ).toLowerCase() ===
-          normalizedSize.toLowerCase()
-      );
+    const sizeObject = variant.sizes.find(
+      (size) =>
+        cleanString(size?.size).toLowerCase() ===
+        normalizedSize.toLowerCase()
+    );
 
     if (!sizeObject) {
       return 0;
     }
 
-    return Number(
-      sizeObject.stock || 0
-    );
+    return Number(sizeObject.stock || 0);
   }
 
   /*
-  ==============================================
+  ================================================
   VARIANT WITHOUT SIZE
-  ==============================================
+  ================================================
   */
 
-  return Number(
-    variant.stock || 0
-  );
+  return Number(variant.stock || 0);
 };
 
 /*
 ==================================================
-GET AUTO SIZE
-==================================================
-
-If a variant has exactly one in-stock size,
-automatically return that size.
-
-Example:
-
-sizes:
-[
-  {
-    size: "s",
-    stock: 20
-  }
-]
-
-=> "s"
-
-If multiple sizes are available,
-return null.
+GET AUTO SELECTED SIZE
 ==================================================
 */
 
-const getAutoSelectedSize = (
-  variant
-) => {
+const getAutoSelectedSize = (variant) => {
   if (
     !variant ||
     !Array.isArray(variant.sizes) ||
@@ -255,15 +420,52 @@ const getAutoSelectedSize = (
         cleanString(size?.size)
     );
 
-  if (
-    availableSizes.length === 1
-  ) {
+  if (availableSizes.length === 1) {
     return cleanString(
       availableSizes[0]?.size
     );
   }
 
   return "";
+};
+
+/*
+==================================================
+CALCULATE TOTAL VARIANT STOCK
+==================================================
+*/
+
+const calculateVariantTotalStock = (
+  variants
+) => {
+  if (!Array.isArray(variants)) {
+    return 0;
+  }
+
+  return variants.reduce(
+    (total, variant) => {
+      if (
+        Array.isArray(variant?.sizes) &&
+        variant.sizes.length > 0
+      ) {
+        return (
+          total +
+          variant.sizes.reduce(
+            (sizeTotal, size) =>
+              sizeTotal +
+              Number(size?.stock || 0),
+            0
+          )
+        );
+      }
+
+      return (
+        total +
+        Number(variant?.stock || 0)
+      );
+    },
+    0
+  );
 };
 
 /*
@@ -277,9 +479,9 @@ const validateProductItem = async (
   index
 ) => {
   /*
-  ==============================================
+  ================================================
   PRODUCT ID
-  ==============================================
+  ================================================
   */
 
   const productId =
@@ -290,16 +492,14 @@ const validateProductItem = async (
 
   if (!productId) {
     throw new Error(
-      `Invalid product ID for item ${
-        index + 1
-      }.`
+      `Invalid product ID for item ${index + 1}.`
     );
   }
 
   /*
-  ==============================================
+  ================================================
   QUANTITY
-  ==============================================
+  ================================================
   */
 
   const quantity =
@@ -315,22 +515,35 @@ const validateProductItem = async (
   }
 
   /*
-  ==============================================
+  ================================================
   CUSTOMER SELECTIONS
-  ==============================================
+  ================================================
+  */
+
+  const rawSelectedColor = cleanString(
+    rawItem?.selectedColor ??
+      rawItem?.color
+  );
+
+  /*
+  IMPORTANT:
+
+  "Default" এবং "Default Color"
+  actual color হিসেবে যাবে না।
   */
 
   const selectedColor =
-    cleanString(
-      rawItem?.selectedColor ??
-        rawItem?.color
-    );
+    isDefaultSelection(rawSelectedColor)
+      ? ""
+      : rawSelectedColor;
 
   const selectedColorCode =
-    cleanString(
-      rawItem?.selectedColorCode ??
-        rawItem?.colorCode
-    );
+    selectedColor
+      ? cleanString(
+          rawItem?.selectedColorCode ??
+            rawItem?.colorCode
+        )
+      : "";
 
   let selectedSize =
     cleanString(
@@ -339,9 +552,9 @@ const validateProductItem = async (
     );
 
   /*
-  ==============================================
+  ================================================
   VARIANT ID
-  ==============================================
+  ================================================
   */
 
   const variantId =
@@ -354,15 +567,13 @@ const validateProductItem = async (
     );
 
   /*
-  ==============================================
-  FIND PRODUCT FROM MONGODB
-  ==============================================
+  ================================================
+  FIND PRODUCT
+  ================================================
   */
 
   const product =
-    await findProduct(
-      productId
-    );
+    await findProduct(productId);
 
   if (!product) {
     throw new Error(
@@ -371,118 +582,45 @@ const validateProductItem = async (
   }
 
   /*
-  ==============================================
-  FIND VARIANT
-  ==============================================
+  ================================================
+  RESOLVE VARIANT
+  ================================================
   */
 
   let variant = null;
 
-  if (
-    variantId ||
-    selectedColor
-  ) {
-    variant =
-      findVariant(
-        product,
-        variantId,
-        selectedColor
-      );
-
-    if (!variant) {
-      throw new Error(
-        `Selected variant was not found for "${product.name}".`
-      );
-    }
-  } else if (
-    Array.isArray(
-      product.variants
-    ) &&
-    product.variants.length > 0
-  ) {
-    /*
-    If product has variants but
-    frontend didn't send any variant,
-    try automatic selection only when
-    there is exactly one available variant.
-    */
-
-    const availableVariants =
-      product.variants.filter(
-        (item) => {
-          if (
-            Array.isArray(
-              item?.sizes
-            ) &&
-            item.sizes.length > 0
-          ) {
-            return item.sizes.some(
-              (size) =>
-                Number(
-                  size?.stock || 0
-                ) > 0
-            );
-          }
-
-          return (
-            Number(
-              item?.stock || 0
-            ) > 0
-          );
-        }
-      );
-
-    if (
-      availableVariants.length === 1
-    ) {
-      variant =
-        availableVariants[0];
-    } else {
-      throw new Error(
-        `Please select a variant for "${product.name}".`
-      );
-    }
+  try {
+    variant = resolveVariant(product, {
+      variantId,
+      selectedColor,
+      allowAutoSelect: true,
+    });
+  } catch (variantError) {
+    throw new Error(
+      variantError.message
+    );
   }
 
   /*
-  ==============================================
-  SIZE AUTO-RESOLVE
-  ==============================================
+  ================================================
+  SIZE AUTO RESOLVE
+  ================================================
 
-  If frontend sends no size but variant has
-  exactly ONE available size, use that size.
-
-  This fixes stale/old cart payloads such as:
-
-  selectedSize: null
-
-  for:
-
-  sizes: [
-    {
-      size: "s",
-      stock: 20
-    }
-  ]
-  ==============================================
+  যদি variant-এর মাত্র একটি available size থাকে,
+  তাহলে automatically সেটি select হবে।
   */
 
   if (
     variant &&
-    Array.isArray(
-      variant.sizes
-    ) &&
+    Array.isArray(variant.sizes) &&
     variant.sizes.length > 0 &&
     !selectedSize
   ) {
     const autoSize =
-      getAutoSelectedSize(
-        variant
-      );
+      getAutoSelectedSize(variant);
 
     if (autoSize) {
-      selectedSize =
-        autoSize;
+      selectedSize = autoSize;
     } else {
       throw new Error(
         `Please select a size for "${product.name}".`
@@ -491,16 +629,14 @@ const validateProductItem = async (
   }
 
   /*
-  ==============================================
+  ================================================
   SIZE VALIDATION
-  ==============================================
+  ================================================
   */
 
   if (
     variant &&
-    Array.isArray(
-      variant.sizes
-    ) &&
+    Array.isArray(variant.sizes) &&
     variant.sizes.length > 0
   ) {
     const sizeObject =
@@ -532,39 +668,30 @@ const validateProductItem = async (
   }
 
   /*
-  ==============================================
+  ================================================
   PRICE FROM DATABASE
-  ==============================================
+  ================================================
 
-  Never trust frontend price.
-  ==============================================
+  Frontend price কখনো trust করা হবে না।
   */
 
   const variantPrice =
     variant
-      ? Number(
-          variant.price
-        )
+      ? Number(variant.price)
       : NaN;
 
   const productPrice =
-    Number(
-      product.price
-    );
+    Number(product.price);
 
   const actualPrice =
     variant &&
-    Number.isFinite(
-      variantPrice
-    ) &&
+    Number.isFinite(variantPrice) &&
     variantPrice >= 0
       ? variantPrice
       : productPrice;
 
   if (
-    !Number.isFinite(
-      actualPrice
-    ) ||
+    !Number.isFinite(actualPrice) ||
     actualPrice < 0
   ) {
     throw new Error(
@@ -573,9 +700,9 @@ const validateProductItem = async (
   }
 
   /*
-  ==============================================
+  ================================================
   STOCK
-  ==============================================
+  ================================================
   */
 
   const availableStock =
@@ -595,21 +722,17 @@ const validateProductItem = async (
   }
 
   /*
-  ==============================================
+  ================================================
   IMAGE
-  ==============================================
+  ================================================
   */
 
   let productImage =
-    cleanString(
-      product.image
-    );
+    cleanString(product.image);
 
   if (
     variant &&
-    Array.isArray(
-      variant.images
-    ) &&
+    Array.isArray(variant.images) &&
     variant.images.length > 0
   ) {
     productImage =
@@ -619,9 +742,9 @@ const validateProductItem = async (
   }
 
   /*
-  ==============================================
+  ================================================
   FINAL NORMALIZED ITEM
-  ==============================================
+  ================================================
   */
 
   return {
@@ -648,14 +771,14 @@ const validateProductItem = async (
         ? cleanString(
             variant.color
           )
-        : selectedColor,
+        : "",
 
     selectedColorCode:
       variant
         ? cleanString(
             variant.colorCode
           )
-        : selectedColorCode,
+        : "",
 
     selectedSize,
 
@@ -665,8 +788,7 @@ const validateProductItem = async (
     quantity,
 
     subtotal:
-      actualPrice *
-      quantity,
+      actualPrice * quantity,
   };
 };
 
@@ -676,37 +798,38 @@ BUILD ORDER ITEMS
 ==================================================
 */
 
-const buildOrderItems =
-  async (items) => {
-    if (
-      !Array.isArray(items) ||
-      items.length === 0
-    ) {
-      throw new Error(
-        "Order must contain at least one item."
+const buildOrderItems = async (
+  items
+) => {
+  if (
+    !Array.isArray(items) ||
+    items.length === 0
+  ) {
+    throw new Error(
+      "Order must contain at least one item."
+    );
+  }
+
+  const orderItems = [];
+
+  for (
+    let index = 0;
+    index < items.length;
+    index++
+  ) {
+    const normalizedItem =
+      await validateProductItem(
+        items[index],
+        index
       );
-    }
 
-    const orderItems = [];
+    orderItems.push(
+      normalizedItem
+    );
+  }
 
-    for (
-      let index = 0;
-      index < items.length;
-      index++
-    ) {
-      const normalizedItem =
-        await validateProductItem(
-          items[index],
-          index
-        );
-
-      orderItems.push(
-        normalizedItem
-      );
-    }
-
-    return orderItems;
-  };
+  return orderItems;
+};
 
 /*
 ==================================================
@@ -715,10 +838,14 @@ DECREASE PRODUCT STOCK
 
 IMPORTANT:
 
-Stock is decreased ONLY when order is
-confirmed.
+Order create:
+    stock decrease হবে না
 
-Order creation does NOT decrease stock.
+Order confirm:
+    stock decrease হবে
+
+Variant stock decrease হলে
+product.stock আবার calculate করা হবে।
 ==================================================
 */
 
@@ -727,9 +854,7 @@ const decreaseProductStock =
     const product =
       await Product.findOne({
         productId:
-          Number(
-            item.productId
-          ),
+          Number(item.productId),
       });
 
     if (!product) {
@@ -738,43 +863,77 @@ const decreaseProductStock =
       );
     }
 
+    const variantId =
+      normalizeVariantId(
+        item.variantId
+      );
+
+    const selectedColor =
+      isDefaultSelection(
+        item.selectedColor
+      )
+        ? ""
+        : cleanString(
+            item.selectedColor
+          );
+
     /*
-    ==============================================
+    ================================================
     FIND VARIANT
-    ==============================================
+    ================================================
     */
 
     let variant = null;
 
     if (
-      item.variantId ||
-      item.selectedColor
+      variantId ||
+      selectedColor
     ) {
       variant =
         findVariant(
           product,
-          item.variantId,
-          item.selectedColor
+          variantId,
+          selectedColor
         );
+
+      if (!variant) {
+        throw new Error(
+          `Selected variant was not found for "${product.name}".`
+        );
+      }
+    } else if (
+      Array.isArray(product.variants) &&
+      product.variants.length > 0
+    ) {
+      /*
+      Order-এর সময় variant information missing হলে
+      confirmation-এর সময় অন্য variant silently select
+      করা হবে না।
+      */
+
+      throw new Error(
+        `Variant information is missing for "${product.name}".`
+      );
     }
 
+    const quantity =
+      Number(item.quantity);
+
     /*
-    ==============================================
+    ================================================
     VARIANT STOCK
-    ==============================================
+    ================================================
     */
 
     if (variant) {
       /*
-      --------------------------------------------
-      SIZE STOCK
-      --------------------------------------------
+      ----------------------------------------------
+      VARIANT WITH SIZE
+      ----------------------------------------------
       */
 
       if (
-        Array.isArray(
-          variant.sizes
-        ) &&
+        Array.isArray(variant.sizes) &&
         variant.sizes.length > 0
       ) {
         const sizeIndex =
@@ -788,9 +947,7 @@ const decreaseProductStock =
               ).toLowerCase()
           );
 
-        if (
-          sizeIndex === -1
-        ) {
+        if (sizeIndex === -1) {
           throw new Error(
             `Size "${item.selectedSize}" was not found for "${product.name}".`
           );
@@ -803,11 +960,6 @@ const decreaseProductStock =
             ].stock || 0
           );
 
-        const quantity =
-          Number(
-            item.quantity
-          );
-
         if (
           currentStock <
           quantity
@@ -817,6 +969,10 @@ const decreaseProductStock =
           );
         }
 
+        /*
+        Deduct size stock
+        */
+
         variant.sizes[
           sizeIndex
         ].stock =
@@ -824,7 +980,7 @@ const decreaseProductStock =
           quantity;
 
         /*
-        Recalculate variant stock
+        Recalculate this variant's total stock
         */
 
         variant.stock =
@@ -836,40 +992,43 @@ const decreaseProductStock =
               ),
             0
           );
+      } else {
+        /*
+        ----------------------------------------------
+        VARIANT WITHOUT SIZE
+        ----------------------------------------------
+        */
 
-        await product.save();
+        const currentStock =
+          Number(
+            variant.stock || 0
+          );
 
-        return;
+        if (
+          currentStock <
+          quantity
+        ) {
+          throw new Error(
+            `Insufficient stock for "${product.name}". Available: ${currentStock}, requested: ${quantity}.`
+          );
+        }
+
+        variant.stock =
+          currentStock -
+          quantity;
       }
 
       /*
-      --------------------------------------------
-      VARIANT WITHOUT SIZE
-      --------------------------------------------
+      ==============================================
+      IMPORTANT:
+      SYNC PRODUCT TOTAL STOCK
+      ==============================================
       */
 
-      const currentStock =
-        Number(
-          variant.stock || 0
+      product.stock =
+        calculateVariantTotalStock(
+          product.variants
         );
-
-      const quantity =
-        Number(
-          item.quantity
-        );
-
-      if (
-        currentStock <
-        quantity
-      ) {
-        throw new Error(
-          `Insufficient stock for "${product.name}". Available: ${currentStock}, requested: ${quantity}.`
-        );
-      }
-
-      variant.stock =
-        currentStock -
-        quantity;
 
       await product.save();
 
@@ -877,19 +1036,14 @@ const decreaseProductStock =
     }
 
     /*
-    ==============================================
+    ================================================
     PRODUCT LEVEL STOCK
-    ==============================================
+    ================================================
     */
 
     const currentStock =
       Number(
         product.stock || 0
-      );
-
-    const quantity =
-      Number(
-        item.quantity
       );
 
     if (
@@ -916,16 +1070,17 @@ CALCULATE DELIVERY CHARGE
 inside-dhaka  => 60
 outside-dhaka => 100
 
-District / Thana আর ব্যবহার করা হবে না.
+District / Thana ব্যবহার করা হবে না.
 ==================================================
 */
 
 const calculateDeliveryCharge = ({
   deliveryArea,
 }) => {
-  const normalizedArea = cleanString(
-    deliveryArea
-  ).toLowerCase();
+  const normalizedArea =
+    cleanString(
+      deliveryArea
+    ).toLowerCase();
 
   if (
     normalizedArea ===
@@ -974,15 +1129,15 @@ router.post(
           body.phone
         );
 
-     const address =
-  cleanString(
-    body.address
-  );
+      const address =
+        cleanString(
+          body.address
+        );
 
-const deliveryArea =
-  cleanString(
-    body.deliveryArea
-  );
+      const deliveryArea =
+        cleanString(
+          body.deliveryArea
+        ).toLowerCase();
 
       const note =
         cleanString(
@@ -1011,34 +1166,34 @@ const deliveryArea =
         });
       }
 
-      
-
       if (!address) {
-  return res.status(400).json({
-    success: false,
-    message:
-      "Address is required.",
-  });
-}
+        return res.status(400).json({
+          success: false,
+          message:
+            "Address is required.",
+        });
+      }
 
-if (!deliveryArea) {
-  return res.status(400).json({
-    success: false,
-    message:
-      "Delivery area is required.",
-  });
-}
+      if (!deliveryArea) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Delivery area is required.",
+        });
+      }
 
-if (
-  deliveryArea !== "inside-dhaka" &&
-  deliveryArea !== "outside-dhaka"
-) {
-  return res.status(400).json({
-    success: false,
-    message:
-      "Invalid delivery area.",
-  });
-}
+      if (
+        deliveryArea !==
+          "inside-dhaka" &&
+        deliveryArea !==
+          "outside-dhaka"
+      ) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Invalid delivery area.",
+        });
+      }
 
       /*
       ==============================================
@@ -1071,6 +1226,12 @@ if (
 
       let rawItems = [];
 
+      /*
+      ----------------------------------------------
+      NEW CART PAYLOAD
+      ----------------------------------------------
+      */
+
       if (
         Array.isArray(
           body.items
@@ -1079,17 +1240,17 @@ if (
       ) {
         rawItems =
           body.items;
-      } else if (
+      }
+
+      /*
+      ----------------------------------------------
+      BACKWARD COMPATIBILITY
+      ----------------------------------------------
+      */
+
+      else if (
         body.productId
       ) {
-        /*
-        --------------------------------------------
-        BACKWARD COMPATIBILITY
-
-        Supports old single-product payload.
-        --------------------------------------------
-        */
-
         rawItems = [
           {
             productId:
@@ -1126,7 +1287,8 @@ if (
       }
 
       if (
-        rawItems.length === 0
+        rawItems.length ===
+        0
       ) {
         return res.status(400).json({
           success: false,
@@ -1184,19 +1346,21 @@ if (
       */
 
       const finalDeliveryCharge =
-  calculateDeliveryCharge({
-    deliveryArea,
-  });
+        calculateDeliveryCharge({
+          deliveryArea,
+        });
 
-if (
-  finalDeliveryCharge === null
-) {
-  return res.status(400).json({
-    success: false,
-    message:
-      "Please select a valid delivery area.",
-  });
-}
+      if (
+        finalDeliveryCharge ===
+        null
+      ) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Please select a valid delivery area.",
+        });
+      }
+
       /*
       ==============================================
       ADDITIONAL DISCOUNT
@@ -1218,12 +1382,13 @@ if (
       ==============================================
       */
 
-      const total = Math.max(
-        0,
-        subtotal +
-          finalDeliveryCharge -
-          additionalDiscount
-      );
+      const total =
+        Math.max(
+          0,
+          subtotal +
+            finalDeliveryCharge -
+            additionalDiscount
+        );
 
       /*
       ==============================================
@@ -1280,49 +1445,85 @@ if (
 
       /*
       ==============================================
-      CREATE ORDER DATA
+      FIRST ITEM
       ==============================================
       */
 
       const firstItem =
         orderItems[0];
 
+      /*
+      ==============================================
+      ORDER DATA
+      ==============================================
+      */
+
       const orderData = {
-  name,
-  phone: normalizedPhone,
+        name,
+        phone:
+          normalizedPhone,
 
-  address,
-  note,
-  deliveryArea,
+        address,
+        note,
+        deliveryArea,
 
-  product: firstItem.product,
-  productId: firstItem.productId,
-  productName: firstItem.productName,
-  productImage: firstItem.productImage,
-  variantId: firstItem.variantId,
-  selectedColor: firstItem.selectedColor,
-  selectedColorCode: firstItem.selectedColorCode,
-  selectedSize: firstItem.selectedSize,
-  price: firstItem.price,
-  quantity: firstItem.quantity,
+        product:
+          firstItem.product,
 
-  items: orderItems,
+        productId:
+          firstItem.productId,
 
-  subtotal,
-  deliveryCharge: finalDeliveryCharge,
-  additionalDiscount,
-  total,
+        productName:
+          firstItem.productName,
 
-  paymentMethod,
-  paymentStatus,
+        productImage:
+          firstItem.productImage,
 
-  status: "pending",
+        variantId:
+          firstItem.variantId,
 
-  source,
-  orderSource,
-  landingPageId,
-  tenantId,
-};
+        selectedColor:
+          firstItem.selectedColor,
+
+        selectedColorCode:
+          firstItem.selectedColorCode,
+
+        selectedSize:
+          firstItem.selectedSize,
+
+        price:
+          firstItem.price,
+
+        quantity:
+          firstItem.quantity,
+
+        items:
+          orderItems,
+
+        subtotal,
+
+        deliveryCharge:
+          finalDeliveryCharge,
+
+        additionalDiscount,
+
+        total,
+
+        paymentMethod,
+
+        paymentStatus,
+
+        status:
+          "pending",
+
+        source,
+
+        orderSource,
+
+        landingPageId,
+
+        tenantId,
+      };
 
       /*
       ==============================================
@@ -1341,16 +1542,11 @@ if (
       );
 
       /*
-      ==============================================
       IMPORTANT:
-      ==============================================
 
-      DO NOT decrease stock here.
+      এখানে stock decrease হবে না।
 
-      Stock will be decreased only when
-      admin confirms the order.
-
-      ==============================================
+      Admin confirm করলে stock decrease হবে।
       */
 
       return res.status(201).json({
@@ -1491,7 +1687,7 @@ router.get(
 /*
 ==================================================
 CONFIRM ORDER
-PATCH /api/orders/:id/confirm
+POST /api/orders/:id/confirm
 ==================================================
 
 Stock is deducted ONLY here.
@@ -1515,6 +1711,7 @@ router.post(
       ) {
         return res.status(400).json({
           success: false,
+
           message:
             "Invalid order ID.",
         });
@@ -1534,6 +1731,7 @@ router.post(
       if (!order) {
         return res.status(404).json({
           success: false,
+
           message:
             "Order not found.",
         });
@@ -1551,6 +1749,7 @@ router.post(
       ) {
         return res.status(400).json({
           success: false,
+
           message:
             "Order is already confirmed.",
         });
@@ -1570,10 +1769,12 @@ router.post(
           : [];
 
       if (
-        orderItems.length === 0
+        orderItems.length ===
+        0
       ) {
         return res.status(400).json({
           success: false,
+
           message:
             "Order has no items.",
         });
@@ -1584,10 +1785,10 @@ router.post(
       FINAL STOCK VALIDATION
       ==============================================
 
-      Stock may have changed after order creation.
+      Order create হওয়ার পর stock change হয়ে
+      যেতে পারে।
 
-      Therefore ALWAYS validate again before
-      deduction.
+      তাই confirm-এর আগে আবার check করা হবে।
       ==============================================
       */
 
@@ -1610,21 +1811,35 @@ router.post(
 
         /*
         --------------------------------------------
-        FIND VARIANT
+        FIND STORED VARIANT
         --------------------------------------------
         */
+
+        const variantId =
+          normalizeVariantId(
+            item.variantId
+          );
+
+        const selectedColor =
+          isDefaultSelection(
+            item.selectedColor
+          )
+            ? ""
+            : cleanString(
+                item.selectedColor
+              );
 
         let variant = null;
 
         if (
-          item.variantId ||
-          item.selectedColor
+          variantId ||
+          selectedColor
         ) {
           variant =
             findVariant(
               product,
-              item.variantId,
-              item.selectedColor
+              variantId,
+              selectedColor
             );
 
           if (!variant) {
@@ -1635,6 +1850,18 @@ router.post(
                 `Selected variant was not found for "${product.name}".`,
             });
           }
+        } else if (
+          Array.isArray(
+            product.variants
+          ) &&
+          product.variants.length > 0
+        ) {
+          return res.status(400).json({
+            success: false,
+
+            message:
+              `Variant information is missing for "${product.name}".`,
+          });
         }
 
         /*
@@ -1651,7 +1878,9 @@ router.post(
           variant.sizes.length > 0
         ) {
           if (
-            !item.selectedSize
+            !cleanString(
+              item.selectedSize
+            )
           ) {
             return res.status(400).json({
               success: false,
@@ -1680,6 +1909,19 @@ router.post(
                 `Size "${item.selectedSize}" is no longer available for "${product.name}".`,
             });
           }
+
+          if (
+            Number(
+              sizeObject.stock || 0
+            ) <= 0
+          ) {
+            return res.status(400).json({
+              success: false,
+
+              message:
+                `Size "${item.selectedSize}" is out of stock for "${product.name}".`,
+            });
+          }
         }
 
         /*
@@ -1699,6 +1941,20 @@ router.post(
           Number(
             item.quantity
           );
+
+        if (
+          !Number.isInteger(
+            requestedQuantity
+          ) ||
+          requestedQuantity <= 0
+        ) {
+          return res.status(400).json({
+            success: false,
+
+            message:
+              `Invalid quantity for "${product.name}".`,
+          });
+        }
 
         if (
           requestedQuantity >
@@ -2063,13 +2319,6 @@ router.get(
   "/:id",
   async (req, res) => {
     try {
-      /*
-      IMPORTANT:
-
-      Keep special routes above /:id
-      ============================================
-      */
-
       const order =
         await Order.findById(
           req.params.id
@@ -2123,34 +2372,34 @@ router.put(
   async (req, res) => {
     try {
       const allowedFields = [
-  "name",
-  "phone",
-  "address",
-  "note",
-  "deliveryArea",
+        "name",
+        "phone",
+        "address",
+        "note",
+        "deliveryArea",
 
-  "status",
+        "status",
 
-  "paymentMethod",
-  "paymentStatus",
+        "paymentMethod",
+        "paymentStatus",
 
-  "courier",
-  "courierStatus",
-  "consignmentId",
-  "trackingCode",
+        "courier",
+        "courierStatus",
+        "consignmentId",
+        "trackingCode",
 
-  "printStatus",
-  "printedAt",
+        "printStatus",
+        "printedAt",
 
-  "returnReason",
-  "refundAmount",
-  "refundStatus",
+        "returnReason",
+        "refundAmount",
+        "refundStatus",
 
-  "source",
-  "orderSource",
-  "landingPageId",
-  "tenantId",
-];
+        "source",
+        "orderSource",
+        "landingPageId",
+        "tenantId",
+      ];
 
       const updateData = {};
 
@@ -2204,6 +2453,48 @@ router.put(
 
       /*
       ==============================================
+      DELIVERY AREA VALIDATION
+      ==============================================
+      */
+
+      if (
+        updateData.deliveryArea !==
+        undefined
+      ) {
+        const deliveryArea =
+          cleanString(
+            updateData.deliveryArea
+          ).toLowerCase();
+
+        if (
+          deliveryArea !==
+            "inside-dhaka" &&
+          deliveryArea !==
+            "outside-dhaka"
+        ) {
+          return res.status(400).json({
+            success: false,
+
+            message:
+              "Invalid delivery area.",
+          });
+        }
+
+        updateData.deliveryArea =
+          deliveryArea;
+
+        /*
+        Update delivery charge automatically
+        */
+
+        updateData.deliveryCharge =
+          calculateDeliveryCharge({
+            deliveryArea,
+          });
+      }
+
+      /*
+      ==============================================
       UPDATE
       ==============================================
       */
@@ -2253,7 +2544,7 @@ router.put(
       */
 
       if (
-        error.name ===
+        error?.name ===
         "ValidationError"
       ) {
         const errors =
@@ -2354,3 +2645,4 @@ EXPORT
 */
 
 module.exports = router;
+
