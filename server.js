@@ -1,4 +1,3 @@
-
 const express = require("express");
 const mongoose = require("mongoose");
 const cors = require("cors");
@@ -7,28 +6,15 @@ require("dotenv").config();
 
 const app = express();
 
-/*
-==================================================
-CONFIG
-==================================================
-*/
-
 const PORT = Number(process.env.PORT) || 30114;
 
 const allowedOrigins = [
-  // Local Development
   "http://localhost:5173",
   "http://localhost:5174",
   "http://127.0.0.1:5173",
   "http://127.0.0.1:5174",
-
-  // Old / Other Frontend
   "https://bdmart-mu.vercel.app",
-
-  // Admin Panel
   "https://sprienge-admin-panel.vercel.app",
-
-  // Main Website
   "https://spriengge.shop",
   "https://www.spriengge.shop",
 ];
@@ -43,16 +29,8 @@ console.log(
 );
 console.log("====================================");
 
-/*
-==================================================
-CORS
-==================================================
-*/
-
 const corsOptions = {
   origin: function (origin, callback) {
-    // Allow requests without Origin
-    // Example: Postman / server-to-server
     if (!origin) {
       return callback(null, true);
     }
@@ -64,7 +42,6 @@ const corsOptions = {
 
     console.log("CORS BLOCKED:", origin);
 
-    // Don't crash backend for unknown origins
     return callback(null, false);
   },
 
@@ -92,19 +69,7 @@ const corsOptions = {
   maxAge: 86400,
 };
 
-/*
-==================================================
-CORS MIDDLEWARE
-==================================================
-*/
-
 app.use(cors(corsOptions));
-
-/*
-==================================================
-PREFLIGHT
-==================================================
-*/
 
 app.options("*", cors(corsOptions));
 
@@ -157,8 +122,14 @@ app.get("/", (req, res) => {
 
 /*
 ==================================================
-PRODUCT ROUTES
+API ROUTES
 ==================================================
+*/
+
+/*
+------------------------------
+PRODUCT ROUTES
+------------------------------
 */
 
 app.use(
@@ -167,9 +138,20 @@ app.use(
 );
 
 /*
-==================================================
+------------------------------
+TENANT ROUTES
+------------------------------
+*/
+
+app.use(
+  "/api/tenants",
+  require("./routes/tenantRoutes")
+);
+
+/*
+------------------------------
 ORDER ROUTES
-==================================================
+------------------------------
 */
 
 app.use(
@@ -179,7 +161,7 @@ app.use(
 
 /*
 ==================================================
-404
+404 HANDLER
 ==================================================
 */
 
@@ -193,7 +175,7 @@ app.use((req, res) => {
 
 /*
 ==================================================
-GLOBAL ERROR
+GLOBAL ERROR HANDLER
 ==================================================
 */
 
@@ -215,7 +197,7 @@ app.use((err, req, res, next) => {
 
 /*
 ==================================================
-MONGODB + SERVER
+START SERVER
 ==================================================
 */
 
@@ -227,18 +209,47 @@ const startServer = async () => {
       );
     }
 
-    await mongoose.connect(process.env.MONGO_URI);
+    await mongoose.connect(
+      process.env.MONGO_URI
+    );
 
     console.log("====================================");
     console.log("MongoDB Connected Successfully");
     console.log("====================================");
 
-    app.listen(PORT, "0.0.0.0", () => {
-      console.log("====================================");
-      console.log(`Server running on port ${PORT}`);
-      console.log("Host: 0.0.0.0");
-      console.log("====================================");
-    });
+    app.listen(
+      PORT,
+      "0.0.0.0",
+      () => {
+        console.log(
+          "===================================="
+        );
+
+        console.log(
+          `Server running on port ${PORT}`
+        );
+
+        console.log(
+          "Host: 0.0.0.0"
+        );
+
+        console.log(
+          "Tenant API: /api/tenants"
+        );
+
+        console.log(
+          "Product API: /api/products"
+        );
+
+        console.log(
+          "Order API: /api/orders"
+        );
+
+        console.log(
+          "===================================="
+        );
+      }
+    );
   } catch (err) {
     console.error("====================================");
     console.error("Backend Startup Error:");
@@ -250,4 +261,3 @@ const startServer = async () => {
 };
 
 startServer();
-
