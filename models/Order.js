@@ -86,7 +86,10 @@ const orderItemSchema = new mongoose.Schema(
 
 const orderSchema = new mongoose.Schema(
   {
-    // Customer
+    // ==========================================
+    // CUSTOMER
+    // ==========================================
+
     name: {
       type: String,
       required: true,
@@ -99,21 +102,9 @@ const orderSchema = new mongoose.Schema(
       trim: true,
     },
 
-    district: {
-      type: String,
-      default: "",
-      trim: true,
-    },
-
-    thana: {
-      type: String,
-      default: "",
-      trim: true,
-    },
-
     address: {
       type: String,
-      default: "",
+      required: true,
       trim: true,
     },
 
@@ -123,7 +114,20 @@ const orderSchema = new mongoose.Schema(
       trim: true,
     },
 
-    // Product backward compatibility
+    // Delivery Area
+    // inside-dhaka  = ৳60
+    // outside-dhaka = ৳100
+    deliveryArea: {
+      type: String,
+      enum: ["inside-dhaka", "outside-dhaka"],
+      required: true,
+      trim: true,
+    },
+
+    // ==========================================
+    // PRODUCT BACKWARD COMPATIBILITY
+    // ==========================================
+
     product: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Product",
@@ -177,7 +181,10 @@ const orderSchema = new mongoose.Schema(
       min: 1,
     },
 
-    // Multiple products
+    // ==========================================
+    // MULTIPLE PRODUCTS
+    // ==========================================
+
     items: {
       type: [orderItemSchema],
       default: [],
@@ -191,8 +198,9 @@ const orderSchema = new mongoose.Schema(
 
     deliveryCharge: {
       type: Number,
-      default: 0,
+      required: true,
       min: 0,
+      default: 0,
     },
 
     additionalDiscount: {
@@ -213,7 +221,10 @@ const orderSchema = new mongoose.Schema(
       min: 0,
     },
 
-    // Payment
+    // ==========================================
+    // PAYMENT
+    // ==========================================
+
     paymentMethod: {
       type: String,
       default: "cod",
@@ -224,7 +235,10 @@ const orderSchema = new mongoose.Schema(
       default: "pending",
     },
 
-    // Order status
+    // ==========================================
+    // ORDER STATUS
+    // ==========================================
+
     status: {
       type: String,
       enum: [
@@ -240,7 +254,10 @@ const orderSchema = new mongoose.Schema(
       default: "pending",
     },
 
-    // Source
+    // ==========================================
+    // ORDER SOURCE
+    // ==========================================
+
     source: {
       type: String,
       enum: [
@@ -269,7 +286,10 @@ const orderSchema = new mongoose.Schema(
       default: "",
     },
 
-    // Admin order
+    // ==========================================
+    // ADMIN ORDER
+    // ==========================================
+
     officeOrderNote: {
       type: String,
       default: "",
@@ -280,7 +300,10 @@ const orderSchema = new mongoose.Schema(
       default: null,
     },
 
-    // Courier
+    // ==========================================
+    // COURIER
+    // ==========================================
+
     courier: {
       type: String,
       default: null,
@@ -316,7 +339,10 @@ const orderSchema = new mongoose.Schema(
       default: [],
     },
 
-    // Print
+    // ==========================================
+    // PRINT
+    // ==========================================
+
     printStatus: {
       type: String,
       enum: [
@@ -334,7 +360,10 @@ const orderSchema = new mongoose.Schema(
       default: null,
     },
 
-    // Return / refund
+    // ==========================================
+    // RETURN / REFUND
+    // ==========================================
+
     returnReason: {
       type: String,
       default: "",

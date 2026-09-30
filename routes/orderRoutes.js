@@ -912,59 +912,37 @@ const decreaseProductStock =
 ==================================================
 CALCULATE DELIVERY CHARGE
 ==================================================
+
+inside-dhaka  => 60
+outside-dhaka => 100
+
+District / Thana আর ব্যবহার করা হবে না.
+==================================================
 */
 
-const calculateDeliveryCharge =
-  ({
-    district,
-    deliveryCharge,
-  }) => {
-    const normalizedDistrict =
-      cleanString(
-        district
-      ).toLowerCase();
+const calculateDeliveryCharge = ({
+  deliveryArea,
+}) => {
+  const normalizedArea = cleanString(
+    deliveryArea
+  ).toLowerCase();
 
-    /*
-    ==============================================
-    DHAKA
-    ==============================================
-    */
+  if (
+    normalizedArea ===
+    "inside-dhaka"
+  ) {
+    return 60;
+  }
 
-    if (
-      normalizedDistrict ===
-      "dhaka"
-    ) {
-      return 60;
-    }
-
-    /*
-    ==============================================
-    FRONTEND DELIVERY CHARGE
-    ==============================================
-    */
-
-    const customCharge =
-      Number(
-        deliveryCharge
-      );
-
-    if (
-      Number.isFinite(
-        customCharge
-      ) &&
-      customCharge >= 0
-    ) {
-      return customCharge;
-    }
-
-    /*
-    ==============================================
-    DEFAULT OUTSIDE DHAKA
-    ==============================================
-    */
-
+  if (
+    normalizedArea ===
+    "outside-dhaka"
+  ) {
     return 100;
-  };
+  }
+
+  return null;
+};
 
 /*
 ==================================================
@@ -996,20 +974,15 @@ router.post(
           body.phone
         );
 
-      const district =
-        cleanString(
-          body.district
-        );
+     const address =
+  cleanString(
+    body.address
+  );
 
-      const thana =
-        cleanString(
-          body.thana
-        );
-
-      const address =
-        cleanString(
-          body.address
-        );
+const deliveryArea =
+  cleanString(
+    body.deliveryArea
+  );
 
       const note =
         cleanString(
@@ -1038,29 +1011,34 @@ router.post(
         });
       }
 
-      if (!district) {
-        return res.status(400).json({
-          success: false,
-          message:
-            "District is required.",
-        });
-      }
-
-      if (!thana) {
-        return res.status(400).json({
-          success: false,
-          message:
-            "Thana is required.",
-        });
-      }
+      
 
       if (!address) {
-        return res.status(400).json({
-          success: false,
-          message:
-            "Address is required.",
-        });
-      }
+  return res.status(400).json({
+    success: false,
+    message:
+      "Address is required.",
+  });
+}
+
+if (!deliveryArea) {
+  return res.status(400).json({
+    success: false,
+    message:
+      "Delivery area is required.",
+  });
+}
+
+if (
+  deliveryArea !== "inside-dhaka" &&
+  deliveryArea !== "outside-dhaka"
+) {
+  return res.status(400).json({
+    success: false,
+    message:
+      "Invalid delivery area.",
+  });
+}
 
       /*
       ==============================================
@@ -1206,12 +1184,19 @@ router.post(
       */
 
       const finalDeliveryCharge =
-        calculateDeliveryCharge({
-          district,
-          deliveryCharge:
-            body.deliveryCharge,
-        });
+  calculateDeliveryCharge({
+    deliveryArea,
+  });
 
+if (
+  finalDeliveryCharge === null
+) {
+  return res.status(400).json({
+    success: false,
+    message:
+      "Please select a valid delivery area.",
+  });
+}
       /*
       ==============================================
       ADDITIONAL DISCOUNT
@@ -1303,107 +1288,41 @@ router.post(
         orderItems[0];
 
       const orderData = {
-        name,
-        phone:
-          normalizedPhone,
-        district,
-        thana,
-        address,
-        note,
+  name,
+  phone: normalizedPhone,
 
-        /*
-        --------------------------------------------
-        BACKWARD COMPATIBILITY FIELDS
-        --------------------------------------------
-        */
+  address,
+  note,
+  deliveryArea,
 
-        product:
-          firstItem.product,
+  product: firstItem.product,
+  productId: firstItem.productId,
+  productName: firstItem.productName,
+  productImage: firstItem.productImage,
+  variantId: firstItem.variantId,
+  selectedColor: firstItem.selectedColor,
+  selectedColorCode: firstItem.selectedColorCode,
+  selectedSize: firstItem.selectedSize,
+  price: firstItem.price,
+  quantity: firstItem.quantity,
 
-        productId:
-          firstItem.productId,
+  items: orderItems,
 
-        productName:
-          firstItem.productName,
+  subtotal,
+  deliveryCharge: finalDeliveryCharge,
+  additionalDiscount,
+  total,
 
-        productImage:
-          firstItem.productImage,
+  paymentMethod,
+  paymentStatus,
 
-        variantId:
-          firstItem.variantId,
+  status: "pending",
 
-        selectedColor:
-          firstItem.selectedColor,
-
-        selectedColorCode:
-          firstItem.selectedColorCode,
-
-        selectedSize:
-          firstItem.selectedSize,
-
-        price:
-          firstItem.price,
-
-        quantity:
-          firstItem.quantity,
-
-        /*
-        --------------------------------------------
-        ALL ITEMS
-        --------------------------------------------
-        */
-
-        items:
-          orderItems,
-
-        /*
-        --------------------------------------------
-        FINANCIAL
-        --------------------------------------------
-        */
-
-        subtotal,
-
-        deliveryCharge:
-          finalDeliveryCharge,
-
-        additionalDiscount,
-
-        total,
-
-        /*
-        --------------------------------------------
-        PAYMENT
-        --------------------------------------------
-        */
-
-        paymentMethod,
-
-        paymentStatus,
-
-        /*
-        --------------------------------------------
-        STATUS
-        --------------------------------------------
-        */
-
-        status:
-          "pending",
-
-        /*
-        --------------------------------------------
-        SOURCE
-        --------------------------------------------
-        */
-
-        source,
-
-        orderSource,
-
-        landingPageId,
-
-        tenantId,
-      };
+  source,
+  orderSource,
+  landingPageId,
+  tenantId,
+};
 
       /*
       ==============================================
@@ -2204,35 +2123,34 @@ router.put(
   async (req, res) => {
     try {
       const allowedFields = [
-        "name",
-        "phone",
-        "district",
-        "thana",
-        "address",
-        "note",
+  "name",
+  "phone",
+  "address",
+  "note",
+  "deliveryArea",
 
-        "status",
+  "status",
 
-        "paymentMethod",
-        "paymentStatus",
+  "paymentMethod",
+  "paymentStatus",
 
-        "courier",
-        "courierStatus",
-        "consignmentId",
-        "trackingCode",
+  "courier",
+  "courierStatus",
+  "consignmentId",
+  "trackingCode",
 
-        "printStatus",
-        "printedAt",
+  "printStatus",
+  "printedAt",
 
-        "returnReason",
-        "refundAmount",
-        "refundStatus",
+  "returnReason",
+  "refundAmount",
+  "refundStatus",
 
-        "source",
-        "orderSource",
-        "landingPageId",
-        "tenantId",
-      ];
+  "source",
+  "orderSource",
+  "landingPageId",
+  "tenantId",
+];
 
       const updateData = {};
 
