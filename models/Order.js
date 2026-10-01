@@ -1,15 +1,25 @@
+// models/Order.js
+
 const mongoose = require("mongoose");
+
+/*
+==================================================
+COURIER EVENT SCHEMA
+==================================================
+*/
 
 const courierEventSchema = new mongoose.Schema(
   {
     status: {
       type: String,
       default: "",
+      trim: true,
     },
 
     note: {
       type: String,
       default: "",
+      trim: true,
     },
 
     at: {
@@ -17,51 +27,90 @@ const courierEventSchema = new mongoose.Schema(
       default: Date.now,
     },
   },
-  { _id: false }
+  {
+    _id: false,
+  }
 );
+
+/*
+==================================================
+ORDER ITEM SCHEMA
+==================================================
+*/
 
 const orderItemSchema = new mongoose.Schema(
   {
+    /*
+    -----------------------------------------------
+    PRODUCT REFERENCE
+    -----------------------------------------------
+    */
+
     product: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Product",
       default: null,
     },
 
+    /*
+    -----------------------------------------------
+    PRODUCT IDENTIFICATION
+    -----------------------------------------------
+    */
+
     productId: {
       type: Number,
       required: true,
+      min: 1,
     },
 
     productName: {
       type: String,
       default: "",
+      trim: true,
     },
 
     productImage: {
       type: String,
       default: "",
+      trim: true,
     },
+
+    /*
+    -----------------------------------------------
+    VARIANT
+    -----------------------------------------------
+    */
 
     variantId: {
       type: String,
       default: "",
+      trim: true,
     },
 
     selectedColor: {
       type: String,
       default: "",
+      trim: true,
     },
 
     selectedColorCode: {
       type: String,
       default: "",
+      trim: true,
     },
 
     selectedSize: {
       type: String,
       default: "",
+      trim: true,
     },
+
+    /*
+    -----------------------------------------------
+    PRICE
+    -----------------------------------------------
+    */
 
     price: {
       type: Number,
@@ -73,22 +122,34 @@ const orderItemSchema = new mongoose.Schema(
       type: Number,
       required: true,
       min: 1,
+      default: 1,
     },
 
     subtotal: {
       type: Number,
       required: true,
       min: 0,
+      default: 0,
     },
   },
-  { _id: false }
+  {
+    _id: false,
+  }
 );
+
+/*
+==================================================
+ORDER SCHEMA
+==================================================
+*/
 
 const orderSchema = new mongoose.Schema(
   {
-    // ==========================================
-    // CUSTOMER
-    // ==========================================
+    /*
+    ==================================================
+    CUSTOMER INFORMATION
+    ==================================================
+    */
 
     name: {
       type: String,
@@ -102,6 +163,12 @@ const orderSchema = new mongoose.Schema(
       trim: true,
     },
 
+    /*
+    IMPORTANT:
+    Customer এখন পুরো address একসাথে লিখবে।
+    District / Thana আলাদা field নেই।
+    */
+
     address: {
       type: String,
       required: true,
@@ -114,19 +181,34 @@ const orderSchema = new mongoose.Schema(
       trim: true,
     },
 
-    // Delivery Area
-    // inside-dhaka  = ৳60
-    // outside-dhaka = ৳100
+    /*
+    ==================================================
+    DELIVERY AREA
+    ==================================================
+    
+    inside-dhaka  = ৳60
+    outside-dhaka = ৳100
+    */
+
     deliveryArea: {
       type: String,
-      enum: ["inside-dhaka", "outside-dhaka"],
+      enum: [
+        "inside-dhaka",
+        "outside-dhaka",
+      ],
       required: true,
       trim: true,
     },
 
-    // ==========================================
-    // PRODUCT BACKWARD COMPATIBILITY
-    // ==========================================
+    /*
+    ==================================================
+    PRODUCT BACKWARD COMPATIBILITY
+    ==================================================
+
+    These fields are kept because older orders may
+    still contain single-product data at top level.
+    New orders primarily use `items`.
+    */
 
     product: {
       type: mongoose.Schema.Types.ObjectId,
@@ -137,36 +219,43 @@ const orderSchema = new mongoose.Schema(
     productId: {
       type: Number,
       default: null,
+      min: 1,
     },
 
     productName: {
       type: String,
       default: "",
+      trim: true,
     },
 
     productImage: {
       type: String,
       default: "",
+      trim: true,
     },
 
     variantId: {
       type: String,
       default: "",
+      trim: true,
     },
 
     selectedColor: {
       type: String,
       default: "",
+      trim: true,
     },
 
     selectedColorCode: {
       type: String,
       default: "",
+      trim: true,
     },
 
     selectedSize: {
       type: String,
       default: "",
+      trim: true,
     },
 
     price: {
@@ -181,14 +270,22 @@ const orderSchema = new mongoose.Schema(
       min: 1,
     },
 
-    // ==========================================
-    // MULTIPLE PRODUCTS
-    // ==========================================
+    /*
+    ==================================================
+    MULTIPLE PRODUCTS
+    ==================================================
+    */
 
     items: {
       type: [orderItemSchema],
       default: [],
     },
+
+    /*
+    ==================================================
+    PRICE CALCULATION
+    ==================================================
+    */
 
     subtotal: {
       type: Number,
@@ -199,8 +296,8 @@ const orderSchema = new mongoose.Schema(
     deliveryCharge: {
       type: Number,
       required: true,
-      min: 0,
       default: 0,
+      min: 0,
     },
 
     additionalDiscount: {
@@ -221,23 +318,36 @@ const orderSchema = new mongoose.Schema(
       min: 0,
     },
 
-    // ==========================================
-    // PAYMENT
-    // ==========================================
+    /*
+    ==================================================
+    PAYMENT
+    ==================================================
+    */
 
     paymentMethod: {
       type: String,
       default: "cod",
+      trim: true,
     },
 
     paymentStatus: {
       type: String,
+      enum: [
+        "pending",
+        "paid",
+        "failed",
+        "refunded",
+        "partially_refunded",
+      ],
       default: "pending",
+      trim: true,
     },
 
-    // ==========================================
-    // ORDER STATUS
-    // ==========================================
+    /*
+    ==================================================
+    ORDER STATUS
+    ==================================================
+    */
 
     status: {
       type: String,
@@ -252,11 +362,14 @@ const orderSchema = new mongoose.Schema(
         "duplicate",
       ],
       default: "pending",
+      trim: true,
     },
 
-    // ==========================================
-    // ORDER SOURCE
-    // ==========================================
+    /*
+    ==================================================
+    ORDER SOURCE
+    ==================================================
+    */
 
     source: {
       type: String,
@@ -269,59 +382,73 @@ const orderSchema = new mongoose.Schema(
         "other",
       ],
       default: "website",
+      trim: true,
     },
 
     orderSource: {
       type: String,
       default: "website",
+      trim: true,
     },
 
     landingPageId: {
       type: String,
       default: "",
+      trim: true,
     },
 
     tenantId: {
       type: String,
       default: "",
+      trim: true,
     },
 
-    // ==========================================
-    // ADMIN ORDER
-    // ==========================================
+    /*
+    ==================================================
+    ADMIN ORDER INFORMATION
+    ==================================================
+    */
 
     officeOrderNote: {
       type: String,
       default: "",
+      trim: true,
     },
 
     createdBy: {
       type: String,
       default: null,
+      trim: true,
     },
 
-    // ==========================================
-    // COURIER
-    // ==========================================
+    /*
+    ==================================================
+    COURIER
+    ==================================================
+    */
 
     courier: {
       type: String,
       default: null,
+      trim: true,
     },
 
     courierStatus: {
       type: String,
       default: null,
+      trim: true,
     },
 
     consignmentId: {
       type: String,
       default: null,
+      trim: true,
     },
 
     trackingCode: {
       type: String,
       default: null,
+      trim: true,
     },
 
     parcelCreatedAt: {
@@ -332,6 +459,7 @@ const orderSchema = new mongoose.Schema(
     parcelError: {
       type: String,
       default: null,
+      trim: true,
     },
 
     courierHistory: {
@@ -339,9 +467,11 @@ const orderSchema = new mongoose.Schema(
       default: [],
     },
 
-    // ==========================================
-    // PRINT
-    // ==========================================
+    /*
+    ==================================================
+    PRINT
+    ==================================================
+    */
 
     printStatus: {
       type: String,
@@ -353,6 +483,7 @@ const orderSchema = new mongoose.Schema(
         "failed",
       ],
       default: "not_printed",
+      trim: true,
     },
 
     printedAt: {
@@ -360,13 +491,16 @@ const orderSchema = new mongoose.Schema(
       default: null,
     },
 
-    // ==========================================
-    // RETURN / REFUND
-    // ==========================================
+    /*
+    ==================================================
+    RETURN / REFUND
+    ==================================================
+    */
 
     returnReason: {
       type: String,
       default: "",
+      trim: true,
     },
 
     refundAmount: {
@@ -384,6 +518,7 @@ const orderSchema = new mongoose.Schema(
         "rejected",
       ],
       default: "pending",
+      trim: true,
     },
   },
   {
@@ -391,4 +526,34 @@ const orderSchema = new mongoose.Schema(
   }
 );
 
-module.exports = mongoose.model("Order", orderSchema);
+/*
+==================================================
+INDEXES
+==================================================
+*/
+
+orderSchema.index({
+  phone: 1,
+});
+
+orderSchema.index({
+  status: 1,
+});
+
+orderSchema.index({
+  createdAt: -1,
+});
+
+orderSchema.index({
+  consignmentId: 1,
+});
+
+/*
+==================================================
+MODEL
+==================================================
+*/
+
+module.exports =
+  mongoose.models.Order ||
+  mongoose.model("Order", orderSchema);
